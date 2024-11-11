@@ -169,8 +169,11 @@ class WebhookManager(commands.Cog):
                 return None
                 
             try:
+                print(f"Attempting to move webhook '{name}' to channel '{channel.name}'...")
                 await webhook.edit(channel=channel)
-                print(f"Webhook '{name}' moved to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}.")
+                print(f"Successfully moved webhook '{name}' to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}")
+                moved_webhook = await self.get_webhook(guild_id, name)
+                print(f"Verified webhook after move: {moved_webhook}")
                 return webhook
             except Exception as e:
                 print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
@@ -207,6 +210,7 @@ class WebhookManager(commands.Cog):
             print(f"Available webhooks: {list(self.webhook_objects.get(guild_id, {}).keys())}")
             return None
         try:
+            print(f"Attempting to send message via webhook '{name}' (URL: {webhook.url})")
             sent_message = await webhook.send(
                 content=content,
                 username=username,
@@ -214,7 +218,7 @@ class WebhookManager(commands.Cog):
                 wait=True,  # Wait for the message to be sent to get the message object
                 view=view
             )
-            print(f"Message sent via webhook '{name}'.")
+            print(f"Successfully sent message via webhook '{name}' with ID {sent_message.id}")
             return sent_message
         except Exception as e:
             print(f"Error sending message via webhook '{name}': {e}")
