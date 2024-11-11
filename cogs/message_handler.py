@@ -535,6 +535,7 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
                                                  disabled=(current_index == len(history) - 1)))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
 
                             await self.webhook_manager.edit_via_webhook(
