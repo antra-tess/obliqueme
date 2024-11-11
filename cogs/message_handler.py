@@ -161,10 +161,18 @@ class MessageHandler(commands.Cog):
             return None
             
         name_lower = name.lower()
-        return discord.utils.find(
-            lambda m: m.name.lower() == name_lower or m.display_name.lower() == name_lower,
-            guild.members
-        )
+        print(f"\nLooking for member with name '{name}' (lowercase: '{name_lower}')")
+        print(f"Guild {guild.name} has {len(guild.members)} members loaded")
+        print("Members intents enabled:", guild.me.guild.intents.members)
+        
+        for member in guild.members:
+            print(f"Checking member - Name: '{member.name}' (lower: '{member.name.lower()}'), Display name: '{member.display_name}' (lower: '{member.display_name.lower()}')")
+            if member.name.lower() == name_lower or member.display_name.lower() == name_lower:
+                print(f"Found matching member: {member}")
+                return member
+        
+        print("No matching member found")
+        return None
 
     def trim_message(self, content):
         lines = content.split('\n')
