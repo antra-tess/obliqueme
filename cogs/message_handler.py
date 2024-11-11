@@ -281,18 +281,22 @@ class MessageHandler(commands.Cog):
                 view=view
             )
 
-            # Initialize message history for this message
-            self.message_history[sent_message.id] = {
-                'messages': deque(maxlen=10),
-                'options': {
-                    'suppress_name': suppress_name,
-                    'custom_name': custom_name
-                }
-            }
             if not sent_message:
                 print("Failed to send 'Generating...' message via webhook.")
                 return
             print(f"Sent 'Generating...' message via webhook '{webhook}' with message ID {sent_message.id}.")
+
+            # Create and register generation context
+            context = await self.generation_manager.create_context(
+                owner_id=message.author.id,
+                guild_id=message.guild.id,
+                mode=mode,
+                seed=seed,
+                suppress_name=suppress_name,
+                custom_name=custom_name,
+                temperature=temperature
+            )
+            await self.generation_manager.register_message(context, sent_message.id)
 
             # Prepare data for the LLM agent
             data = {
@@ -303,19 +307,7 @@ class MessageHandler(commands.Cog):
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': message.author.id,
-                'suppress_name': suppress_name,
-                'custom_name': custom_name,
-                'temperature': temperature,
-                'seed': seed,
-                'mode': mode
-            }
-
-            # Store the original options
-            self.message_history[sent_message.id] = {
-                'options': {
-                    'suppress_name': suppress_name,
-                    'custom_name': custom_name
-                }
+                'context': context  # Pass the context instead of individual parameters
             }
 
             # Interact with the LLM agent (stateful)
