@@ -26,6 +26,7 @@ class MessageHandler(commands.Cog):
     )
     @discord.app_commands.describe(
         seed="Starting text for the simulation (optional)",
+        mode="Simulation mode: 'self' (default) or 'full'",
         suppress_name="Don't add your name at the end of the prompt",
         custom_name="Use a custom name instead of your display name",
         temperature="Set the temperature for generation (0.1-1.0)"
@@ -34,6 +35,7 @@ class MessageHandler(commands.Cog):
         self, 
         interaction: discord.Interaction,
         seed: str = None,
+        mode: str = "self",
         suppress_name: bool = False,
         custom_name: str = None,
         temperature: float = None
@@ -98,7 +100,8 @@ class MessageHandler(commands.Cog):
                 'suppress_name': suppress_name,
                 'custom_name': custom_name,
                 'temperature': temperature,
-                'seed': seed  # Add seed text
+                'seed': seed,
+                'mode': mode
             }
 
             # Get or create agent and process request
@@ -176,6 +179,18 @@ class MessageHandler(commands.Cog):
 
             # Extract options
             suppress_name = "-s" in options
+            
+            # Extract mode
+            mode = "self"  # default mode
+            if "-m" in options:
+                mode_index = options.index("-m") + 1
+                if mode_index < len(options):
+                    mode_value = options[mode_index]
+                    if mode_value in ["self", "full"]:
+                        mode = mode_value
+                        # Remove the mode from seed if it was captured there
+                        if mode_value in seed_words:
+                            seed_words.remove(mode_value)
             
             # Extract custom name
             custom_name = None
@@ -286,7 +301,8 @@ class MessageHandler(commands.Cog):
                 'suppress_name': suppress_name,
                 'custom_name': custom_name,
                 'temperature': temperature,
-                'seed': seed  # Add seed text
+                'seed': seed,
+                'mode': mode
             }
 
             # Store the original options
