@@ -62,30 +62,32 @@ class WebhookManager(commands.Cog):
     async def get_next_webhook(self, guild_id, channel_id):
         """Get the next available webhook in the pool and move it to the target channel."""
         print(f"\nGetting next webhook for guild {guild_id}, channel {channel_id}")
+        
+        # Get next index and webhook name under lock
         async with self.lock:
             if guild_id not in self.current_index:
                 self.current_index[guild_id] = 0
-            
-            # Get next index
             next_index = (self.current_index[guild_id] + 1) % self.pool_size
             self.current_index[guild_id] = next_index
-            
-            # Get or create webhook
             webhook_name = f'oblique_{next_index + 1}'
             print(f"Selected webhook name: {webhook_name}")
-            
-            if webhook_name not in self.webhook_objects.get(guild_id, {}):
-                print(f"Creating new webhook {webhook_name}")
-                webhook = await self.create_webhook(webhook_name, channel_id)
+            webhook = self.webhook_objects.get(guild_id, {}).get(webhook_name)
+
+        # Handle webhook creation or movement outside lock
+        if not webhook:
+            print(f"Creating new webhook {webhook_name}")
+            webhook = await self.create_webhook(webhook_name, channel_id)
+        else:
+            print(f"Found existing webhook {webhook_name}")
+            print(f"Moving webhook to channel {channel_id}")
+            webhook = await self.move_webhook(guild_id, webhook_name, self.bot.get_channel(channel_id))
+            if webhook:
+                print("Successfully moved webhook")
             else:
-                print(f"Found existing webhook {webhook_name}")
-                webhook = self.webhook_objects[guild_id][webhook_name]
-                print(f"Moving webhook to channel before {channel_id}")
-                webhook = await self.move_webhook(guild_id, webhook_name, self.bot.get_channel(channel_id))
-                print("Moved webhook")
-            
-            print(f"Returning webhook {webhook_name}: {webhook}")
-            return webhook_name, webhook
+                print("Failed to move webhook")
+        
+        print(f"Returning webhook {webhook_name}: {webhook}")
+        return webhook_name, webhook
 
     async def get_webhook(self, guild_id, name):
         """
@@ -159,36 +161,44 @@ class WebhookManager(commands.Cog):
         Returns:
             discord.Webhook: The updated webhook object.
         """
+        # Get webhook under lock
         async with self.lock:
             webhook = self.webhook_objects.get(guild_id, {}).get(name)
-            if not webhook:
-                print(f"Webhook '{name}' not found in guild {guild_id}.")
-                return None
             
-            if channel.guild.id != guild_id:
-                print(f"Cannot move webhook '{name}' to a different guild.")
-                return None
-                
+        if not webhook:
+            print(f"Webhook '{name}' not found in guild {guild_id}.")
+            return None
+        
+        if channel.guild.id != guild_id:
+            print(f"Cannot move webhook '{name}' to a different guild.")
+            return None
+            
+        try:
+            print(f"Attempting to move webhook '{name}' to channel '{channel.name}'...")
+            print(f"Webhook before move - Channel: {webhook.channel_id}, Token: {webhook.token is not None}")
+            
             try:
-                print(f"Attempting to move webhook '{name}' to channel '{channel.name}'...")
-                try:
-                    print(f"Webhook before move - Channel: {webhook.channel_id}, Token: {webhook.token is not None}")
-                    await webhook.edit(channel=channel)
-                    print(f"Successfully moved webhook '{name}' to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}")
-                    moved_webhook = await self.get_webhook(guild_id, name)
+                # Move webhook without lock
+                await webhook.edit(channel=channel)
+                print(f"Successfully moved webhook '{name}' to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}")
+                
+                # Verify move was successful
+                async with self.lock:
+                    moved_webhook = self.webhook_objects[guild_id][name]
                     print(f"Webhook after move - Channel: {moved_webhook.channel_id}, Token: {moved_webhook.token is not None}")
                     if moved_webhook.channel_id != channel.id:
                         print("WARNING: Webhook channel ID mismatch after move!")
-                    return webhook
-                except discord.HTTPException as e:
-                    print(f"HTTP error moving webhook: {e}")
-                    return None
-                except Exception as e:
-                    print(f"Unexpected error moving webhook: {e}")
-                    return None
-            except Exception as e:
-                print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
+                
+                return webhook
+            except discord.HTTPException as e:
+                print(f"HTTP error moving webhook: {e}")
                 return None
+            except Exception as e:
+                print(f"Unexpected error moving webhook: {e}")
+                return None
+        except Exception as e:
+            print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
+            return None
 
     async def send_via_webhook(self, name, content, username, avatar_url, guild_id, view=None):
         """
