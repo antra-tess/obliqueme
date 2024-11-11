@@ -18,8 +18,7 @@ class MessageHandler(commands.Cog):
         self.config = config
         self.agents = {}
         self.agents_lock = asyncio.Lock()
-        self.message_history = {}  # This will now store history per message
-        self.message_current_index = {}  # This will store the current index for each message
+        self.generation_manager = GenerationManager()
 
     @discord.app_commands.command(
         name="oblique",
