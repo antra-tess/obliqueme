@@ -102,9 +102,6 @@ class MessageHandler(commands.Cog):
             agent = await self.get_or_create_agent(interaction.user.id)
             await agent.enqueue_message(data)
 
-            # Send a completion message
-            await interaction.followup.send("Generation started!", ephemeral=True)
-
         except Exception as e:
             print(f"Error handling slash command: {e}")
             import traceback
