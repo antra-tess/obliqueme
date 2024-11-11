@@ -522,6 +522,26 @@ class MessageHandler(commands.Cog):
                         if custom_id == "trim":
                             new_content = self.trim_message(context.current_content)
                             await context.add_generation(new_content)  # Add trimmed version as new generation
+                            
+                            # Update the message with trimmed content and buttons
+                            view = View()
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
+                                               disabled=(context.current_index == 0)))
+                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
+                                               disabled=(context.current_index == len(context.history) - 1)))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
+                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+
+                            await self.webhook_manager.edit_via_webhook(
+                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                message_id=original_message.id,
+                                new_content=new_content,
+                                guild_id=interaction.guild_id,
+                                view=view
+                            )
+                            print(f"Updated message after trim for {interaction.user.display_name}")
                         else:
                             new_index = context.current_index - 1 if custom_id == "prev" else context.current_index + 1
                             new_content = await context.navigate(new_index)
