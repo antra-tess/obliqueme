@@ -63,14 +63,27 @@ class MessageHandler(commands.Cog):
             cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
             view.add_item(cancel_button)
 
+            # Handle custom name and avatar
+            if custom_name:
+                target_member = self.find_member_by_name(custom_name, interaction.guild)
+                if target_member:
+                    display_name = target_member.display_name
+                    avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
+                else:
+                    display_name = custom_name
+                    avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
+                webhook_username = f"{display_name}[oblique:{interaction.user.display_name}]"
+            else:
+                webhook_username = f"{interaction.user.display_name}[oblique]"
+                avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
+
             # Send initial message
             generating_content = "Oblique: Generating..."
-            reversed_username = interaction.user.display_name + "[oblique]"
             sent_message = await self.webhook_manager.send_via_webhook(
                 name=webhook_name,
                 content=generating_content,
-                username=reversed_username,
-                avatar_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None,
+                username=webhook_username,
+                avatar_url=avatar_url,
                 guild_id=interaction.guild_id,
                 view=view
             )
@@ -132,6 +145,17 @@ class MessageHandler(commands.Cog):
             print(f"Successfully synced {len(commands)} commands")
         except Exception as e:
             print(f"Failed to sync commands: {e}")
+
+    def find_member_by_name(self, name: str, guild: discord.Guild) -> Optional[discord.Member]:
+        """Find a guild member by username or display name."""
+        if not name:
+            return None
+            
+        name_lower = name.lower()
+        return discord.utils.find(
+            lambda m: m.name.lower() == name_lower or m.display_name.lower() == name_lower,
+            guild.members
+        )
 
     def trim_message(self, content):
         lines = content.split('\n')
@@ -274,14 +298,27 @@ class MessageHandler(commands.Cog):
             cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
             view.add_item(cancel_button)
 
+            # Handle custom name and avatar
+            if custom_name:
+                target_member = self.find_member_by_name(custom_name, message.guild)
+                if target_member:
+                    display_name = target_member.display_name
+                    avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
+                else:
+                    display_name = custom_name
+                    avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
+                webhook_username = f"{display_name}[oblique:{message.author.display_name}]"
+            else:
+                webhook_username = f"{message.author.display_name}[oblique]"
+                avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
+
             # Send 'Generating...' via webhook, capture the message object
             generating_content = "Oblique: Generating..."
-            reversed_username = message.author.display_name + "[oblique]"
             sent_message = await self.webhook_manager.send_via_webhook(
                 name=webhook_name,
                 content=generating_content,
-                username=reversed_username,
-                avatar_url=message.author.display_avatar.url if message.author.display_avatar else None,
+                username=webhook_username,
+                avatar_url=avatar_url,
                 guild_id=message.guild.id,
                 view=view
             )
