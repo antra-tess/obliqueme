@@ -79,29 +79,28 @@ class MessageHandler(commands.Cog):
                 await interaction.followup.send("Failed to send initial message.", ephemeral=True)
                 return
 
-            # Initialize message history
-            self.message_history[sent_message.id] = {
-                'messages': deque(maxlen=10),
-                'options': {
-                    'suppress_name': suppress_name,
-                    'custom_name': custom_name
-                }
-            }
+            # Create and register generation context
+            context = await self.generation_manager.create_context(
+                owner_id=interaction.user.id,
+                guild_id=interaction.guild_id,
+                mode=mode,
+                seed=seed,
+                suppress_name=suppress_name,
+                custom_name=custom_name,
+                temperature=temperature
+            )
+            await self.generation_manager.register_message(context, sent_message.id)
 
             # Prepare data for LLM agent
             data = {
-                'message': interaction,  # Pass interaction instead of message
+                'message': interaction,
                 'generating_message_id': sent_message.id,
                 'channel_id': interaction.channel_id,
                 'username': custom_name or interaction.user.display_name,
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': interaction.user.id,
-                'suppress_name': suppress_name,
-                'custom_name': custom_name,
-                'temperature': temperature,
-                'seed': seed,
-                'mode': mode
+                'context': context  # Pass the context instead of individual parameters
             }
 
             # Get or create agent and process request
