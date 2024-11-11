@@ -349,6 +349,7 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
                                                disabled=(current_index == len(history) - 1)))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
                         else:
                             # Keep the cancel button for the first generation
@@ -393,25 +394,40 @@ class MessageHandler(commands.Cog):
         try:
             if interaction.type == discord.InteractionType.component:
                 custom_id = interaction.data["custom_id"]
-                if custom_id in ["reroll", "prev", "next", "trim", "delete", "cancel"]:
+                if custom_id in ["reroll", "prev", "next", "trim", "delete", "cancel", "commit"]:
                     await interaction.response.defer()
 
                     original_message = interaction.message
                     user_id = interaction.user.id
 
-                    if custom_id in ["delete", "cancel"]:
+                    if custom_id in ["delete", "cancel", "commit"]:
                         print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
-                        await self.webhook_manager.delete_webhook_message(
-                            name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
-                            message_id=original_message.id,
-                            guild_id=interaction.guild_id
-                        )
-                        print(f"Deleted message for {interaction.user.display_name}")
                         
-                        if custom_id == "cancel":
-                            # TODO: Add logic to cancel the generation in the LLM agent
+                        if custom_id == "commit":
+                            # Remove all buttons and keep the content
+                            await self.webhook_manager.edit_via_webhook(
+                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                message_id=original_message.id,
+                                new_content=original_message.content,
+                                guild_id=interaction.guild_id,
+                                view=None  # No buttons
+                            )
+                            # Clean up message history
                             if original_message.id in self.message_history:
                                 del self.message_history[original_message.id]
+                            print(f"Committed message for {interaction.user.display_name}")
+                        else:
+                            # Handle delete and cancel
+                            await self.webhook_manager.delete_webhook_message(
+                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                message_id=original_message.id,
+                                guild_id=interaction.guild_id
+                            )
+                            print(f"Deleted message for {interaction.user.display_name}")
+                            
+                            if custom_id == "cancel":
+                                if original_message.id in self.message_history:
+                                    del self.message_history[original_message.id]
                         return
 
                     if custom_id == "reroll":
