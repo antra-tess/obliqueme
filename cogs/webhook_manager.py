@@ -8,13 +8,15 @@ from utils.webhook_utils import parse_webhook_url
 
 
 class WebhookManager(commands.Cog):
-    def __init__(self, bot, webhook_urls):
+    def __init__(self, bot, webhook_urls, pool_size=6):
         super().__init__()  # Initialize the superclass
         self.bot = bot
         self.webhook_urls = webhook_urls
         self.webhook_objects = {}  # Format: {guild_id: {webhook_name: webhook}}
         self.lock = asyncio.Lock()
         self.initialized = False
+        self.pool_size = pool_size
+        self.current_index = {}  # Format: {guild_id: last_used_index}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -30,9 +32,13 @@ class WebhookManager(commands.Cog):
             guild_webhooks = await guild.webhooks()
             bot_webhooks = [webhook for webhook in guild_webhooks if webhook.user == self.bot.user]
             
-            for webhook in bot_webhooks:
-                self.webhook_objects[guild.id][webhook.name] = webhook
-                print(f"Found existing webhook '{webhook.name}' in guild {guild.id}: {webhook.url}")
+            # Initialize webhook pool for this guild
+            for i in range(self.pool_size):
+                webhook_name = f'oblique_{i+1}'
+                existing_webhook = discord.utils.get(bot_webhooks, name=webhook_name)
+                if existing_webhook:
+                    self.webhook_objects[guild.id][webhook_name] = existing_webhook
+                    print(f"Found existing webhook '{webhook_name}' in guild {guild.id}: {existing_webhook.url}")
 
         # Initialize any remaining webhooks from the webhook_urls configuration
         for name, url in self.webhook_urls.items():
