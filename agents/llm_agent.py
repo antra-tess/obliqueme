@@ -117,7 +117,7 @@ class LLMAgent:
                 except Exception as e:
                     clean_content = content
 
-                if clean_content.startswith(".."):
+                if clean_content.startswith("."):
                     continue
 
                 # Preserve newlines
