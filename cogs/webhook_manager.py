@@ -170,11 +170,19 @@ class WebhookManager(commands.Cog):
                 
             try:
                 print(f"Attempting to move webhook '{name}' to channel '{channel.name}'...")
-                await webhook.edit(channel=channel)
-                print(f"Successfully moved webhook '{name}' to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}")
-                moved_webhook = await self.get_webhook(guild_id, name)
-                print(f"Verified webhook after move: {moved_webhook}")
-                return webhook
+                try:
+                    await webhook.edit(channel=channel)
+                    print(f"Successfully moved webhook '{name}' to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}")
+                    moved_webhook = await self.get_webhook(guild_id, name)
+                    print(f"Verified webhook after move: {moved_webhook}")
+                    print(f"Webhook token still valid: {webhook.token is not None}")
+                    return webhook
+                except discord.HTTPException as e:
+                    print(f"HTTP error moving webhook: {e}")
+                    return None
+                except Exception as e:
+                    print(f"Unexpected error moving webhook: {e}")
+                    return None
             except Exception as e:
                 print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
                 return None

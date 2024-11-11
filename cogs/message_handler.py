@@ -83,6 +83,10 @@ class MessageHandler(commands.Cog):
 
             # Send initial message
             generating_content = "Oblique: Generating..."
+            print(f"\nAttempting to send initial message:")
+            print(f"Webhook name: {webhook_name}")
+            print(f"Username: {webhook_username}")
+            print(f"Avatar URL: {avatar_url}")
             sent_message = await self.webhook_manager.send_via_webhook(
                 name=webhook_name,
                 content=generating_content,
@@ -91,6 +95,7 @@ class MessageHandler(commands.Cog):
                 guild_id=interaction.guild_id,
                 view=view
             )
+            print(f"Send result: {sent_message}")
 
             if not sent_message:
                 await interaction.followup.send("Failed to send initial message.", ephemeral=True)
