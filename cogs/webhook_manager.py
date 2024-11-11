@@ -53,6 +53,26 @@ class WebhookManager(commands.Cog):
             except Exception as e:
                 print(f"Error initializing webhook '{name}': {e}")
 
+    async def get_next_webhook(self, guild_id, channel_id):
+        """Get the next available webhook in the pool and move it to the target channel."""
+        async with self.lock:
+            if guild_id not in self.current_index:
+                self.current_index[guild_id] = 0
+            
+            # Get next index
+            next_index = (self.current_index[guild_id] + 1) % self.pool_size
+            self.current_index[guild_id] = next_index
+            
+            # Get or create webhook
+            webhook_name = f'oblique_{next_index + 1}'
+            if webhook_name not in self.webhook_objects.get(guild_id, {}):
+                webhook = await self.create_webhook(webhook_name, channel_id)
+            else:
+                webhook = self.webhook_objects[guild_id][webhook_name]
+                webhook = await self.move_webhook(guild_id, webhook_name, self.bot.get_channel(channel_id))
+            
+            return webhook_name, webhook
+
     async def get_webhook(self, guild_id, name):
         """
         Retrieves a webhook by guild ID and name.
