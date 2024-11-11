@@ -389,7 +389,7 @@ class MessageHandler(commands.Cog):
                             view = View()
                             view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
                                                disabled=(context.current_index == 0)))
-                            view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
+                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
                                                disabled=(context.current_index == len(context.history) - 1)))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
@@ -533,7 +533,7 @@ class MessageHandler(commands.Cog):
                             view = View()
                             view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
                                                  disabled=(context.current_index == 0)))
-                            view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
+                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
                                                  disabled=(context.current_index == len(context.history) - 1)))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
