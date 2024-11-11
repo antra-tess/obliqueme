@@ -123,7 +123,7 @@ class LLMAgent:
                 except Exception as e:
                     clean_content = content
 
-                if clean_content.startswith("."):
+                if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
 
                 # Preserve newlines
