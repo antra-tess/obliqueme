@@ -105,15 +105,16 @@ class MessageHandler(commands.Cog):
             #     print(f"Channel with ID {message.channel_id} not found.")
             #     return
 
-            webhooks = list(self.webhook_manager.webhook_objects.keys())
-            # randomize the webhook to use
-            max_index = len(webhooks) - 1
-            index = random.randint(0, max_index)
-            webhook_name = webhooks[index]
-
-            # Move the webhook to the target channel if not already there
-
-            webhook = await self.webhook_manager.move_webhook(webhook_name, message.channel)
+            # Get webhooks for this guild
+            guild_webhooks = self.webhook_manager.webhook_objects.get(message.guild.id, {})
+            if not guild_webhooks:
+                # Create initial webhook for this guild if none exist
+                webhook = await self.webhook_manager.create_webhook('oblique_main', message.channel.id)
+                webhook_name = 'oblique_main'
+            else:
+                # Select random webhook from this guild's webhooks
+                webhook_name = random.choice(list(guild_webhooks.keys()))
+                webhook = await self.webhook_manager.move_webhook(message.guild.id, webhook_name, message.channel)
 
             if not webhook:
                 print("Failed to move webhook for the replacement.")
@@ -289,7 +290,7 @@ class MessageHandler(commands.Cog):
                     if custom_id == "delete":
                         print(f"Delete button clicked by {interaction.user.display_name}")
                         await self.webhook_manager.delete_webhook_message(
-                            name=next(iter(self.webhook_manager.webhook_objects)),
+                            name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
                             message_id=original_message.id
                         )
                         print(f"Deleted message for {interaction.user.display_name}")
@@ -307,7 +308,7 @@ class MessageHandler(commands.Cog):
                             'generating_message_id': original_message.id,
                             'channel_id': interaction.channel_id,
                             'username': original_options.get('custom_name') or interaction.user.display_name,
-                            'webhook': next(iter(self.webhook_manager.webhook_objects)),  # Get the first webhook name
+                            'webhook': next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),  # Get the first webhook name
                             'suppress_name': original_options.get('suppress_name', False),
                             'custom_name': original_options.get('custom_name')
                         }
@@ -358,7 +359,7 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
 
                             await self.webhook_manager.edit_via_webhook(
-                                name=next(iter(self.webhook_manager.webhook_objects)),
+                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 view=view
