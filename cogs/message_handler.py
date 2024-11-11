@@ -163,7 +163,7 @@ class MessageHandler(commands.Cog):
             view.add_item(next_button)
 
             # Send 'Generating...' via webhook, capture the message object
-            generating_content = "Generating..."
+            generating_content = "Oblique: Generating..."
             reversed_username = message.author.display_name + "[oblique]"
             sent_message = await self.webhook_manager.send_via_webhook(
                 name=webhook_name,
