@@ -546,13 +546,16 @@ class MessageHandler(commands.Cog):
                             if target_member := interaction.guild.get_member(target_member_id):
                                 avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
 
+                        # Get next webhook
+                        webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
+
                         # Prepare data for the LLM agent
                         data = {
                             'message': original_message,
                             'generating_message_id': original_message.id,
                             'channel_id': interaction.channel_id,
                             'username': context.parameters.get('custom_name') or interaction.user.display_name,
-                            'webhook': next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                            'webhook': webhook_name,
                             'context': context,
                             'mode': context.parameters.get('mode', 'self'),
                             'seed': context.parameters.get('seed'),
@@ -564,7 +567,7 @@ class MessageHandler(commands.Cog):
 
                         # Edit the message to show "Regenerating..."
                         await self.webhook_manager.edit_via_webhook(
-                            name=data['webhook'],
+                            name=webhook_name,
                             message_id=original_message.id,
                             new_content="Regenerating...",
                             guild_id=interaction.guild_id
@@ -600,8 +603,9 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
 
+                            webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
                             await self.webhook_manager.edit_via_webhook(
-                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                name=webhook_name,
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,
