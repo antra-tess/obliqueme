@@ -163,7 +163,7 @@ class MessageHandler(commands.Cog):
         name_lower = name.lower()
         print(f"\nLooking for member with name '{name}' (lowercase: '{name_lower}')")
         print(f"Guild {guild.name} has {len(guild.members)} members loaded")
-        print("Members intents enabled:", guild.me.guild.intents.members)
+        print("Members intents enabled:", self.bot.intents.members)
         
         for member in guild.members:
             print(f"Checking member - Name: '{member.name}' (lower: '{member.name.lower()}'), Display name: '{member.display_name}' (lower: '{member.display_name.lower()}')")
