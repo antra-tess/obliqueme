@@ -170,7 +170,7 @@ class WebhookManager(commands.Cog):
             print(f"Error sending message via webhook '{name}': {e}")
             return None
 
-    async def edit_via_webhook(self, name, message_id, new_content, view=None):
+    async def edit_via_webhook(self, name, message_id, new_content, guild_id, view=None):
         """
         Edits a specific message sent via the specified webhook.
 
@@ -178,12 +178,13 @@ class WebhookManager(commands.Cog):
             name (str): The name of the webhook.
             message_id (int): The ID of the message to edit.
             new_content (str): The new content for the message.
+            guild_id (int): The ID of the guild.
             view (discord.ui.View, optional): The view containing components to add to the message.
 
         Returns:
             discord.Message: The edited webhook message object.
         """
-        webhook = await self.get_webhook(name)
+        webhook = await self.get_webhook(guild_id, name)
         if not webhook:
             print(f"Webhook '{name}' not found.")
             return None
@@ -195,18 +196,19 @@ class WebhookManager(commands.Cog):
             print(f"Error editing message via webhook '{name}': {e}")
             return None
 
-    async def delete_webhook_message(self, name, message_id):
+    async def delete_webhook_message(self, name, message_id, guild_id):
         """
         Deletes a specific message sent via the specified webhook.
 
         Args:
             name (str): The name of the webhook.
             message_id (int): The ID of the message to delete.
+            guild_id (int): The ID of the guild.
 
         Returns:
             bool: True if the message was successfully deleted, False otherwise.
         """
-        webhook = await self.get_webhook(name)
+        webhook = await self.get_webhook(guild_id, name)
         if not webhook:
             print(f"Webhook '{name}' not found.")
             return False

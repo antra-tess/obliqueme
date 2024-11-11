@@ -292,7 +292,8 @@ class MessageHandler(commands.Cog):
                         print(f"Delete button clicked by {interaction.user.display_name}")
                         await self.webhook_manager.delete_webhook_message(
                             name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
-                            message_id=original_message.id
+                            message_id=original_message.id,
+                            guild_id=interaction.guild_id
                         )
                         print(f"Deleted message for {interaction.user.display_name}")
                         return
@@ -318,7 +319,8 @@ class MessageHandler(commands.Cog):
                         await self.webhook_manager.edit_via_webhook(
                             name=data['webhook'],
                             message_id=original_message.id,
-                            new_content="Regenerating..."
+                            new_content="Regenerating...",
+                            guild_id=interaction.guild_id
                         )
                         print(f"Regenerating message for {data['username']}")
 
@@ -363,6 +365,7 @@ class MessageHandler(commands.Cog):
                                 name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
                                 message_id=original_message.id,
                                 new_content=new_content,
+                                guild_id=interaction.guild_id,
                                 view=view
                             )
                             print(f"Updated message after {custom_id} for {interaction.user.display_name}")
