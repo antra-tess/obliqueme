@@ -524,10 +524,10 @@ class MessageHandler(commands.Cog):
                             # Update the message content and button states
                             view = View()
                             view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
-                                                 disabled=(current_index == 0)))
+                                                 disabled=(context.current_index == 0)))
                             view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
-                                                 disabled=(current_index == len(history) - 1)))
+                                                 disabled=(context.current_index == len(context.history) - 1)))
                             view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
                             view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
