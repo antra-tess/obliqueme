@@ -365,21 +365,14 @@ class MessageHandler(commands.Cog):
                             print(f"Channel with ID {channel_id} not found.")
                             return
 
-                        # Update the message history
-                        if generating_message_id not in self.message_history:
-                            self.message_history[generating_message_id] = {'messages': deque(maxlen=10),
-                                                                           'options': data.get('options', {})}
-                        elif 'messages' not in self.message_history[generating_message_id]:
-                            self.message_history[generating_message_id]['messages'] = deque(maxlen=10)
+                        # Get or create context
+                        context = await self.generation_manager.get_context(generating_message_id)
+                        if not context:
+                            print(f"No context found for message {generating_message_id}")
+                            return
 
-                        # Append the new replacement text
-                        self.message_history[generating_message_id]['messages'].append(replacement_text)
-                        self.message_current_index[generating_message_id] = len(
-                            self.message_history[generating_message_id]['messages']) - 1
-
-                        # Create full button set after generation completes
-                        history = self.message_history[generating_message_id]['messages']
-                        current_index = self.message_current_index[generating_message_id]
+                        # Add the new generation to context
+                        await context.add_generation(replacement_text)
                         
                         # Only show full button set if this isn't the first generation
                         if len(history) > 0:
