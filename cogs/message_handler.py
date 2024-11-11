@@ -2,8 +2,12 @@ import random
 
 import discord
 from discord.ext import commands
+from discord import ButtonStyle
+from discord.ui import Button, View
 import asyncio
 from agents.llm_agent import LLMAgent
+from collections import deque
+
 
 class MessageHandler(commands.Cog):
     def __init__(self, bot, webhook_manager, config):
@@ -13,10 +17,36 @@ class MessageHandler(commands.Cog):
         self.config = config
         self.agents = {}
         self.agents_lock = asyncio.Lock()
+        self.message_history = {}  # This will now store history per message
+        self.message_current_index = {}  # This will store the current index for each message
 
     @commands.Cog.listener()
     async def on_ready(self):
         print('MessageHandler Cog is ready.')
+        await self.create_webhooks()
+        await self.webhook_manager.initialize_webhooks()
+
+    def trim_message(self, content):
+        lines = content.split('\n')
+        if not lines:
+            return content
+
+        last_line = lines[-1]
+        if '.' not in last_line:
+            return '\n'.join(lines[:-1])
+
+        if last_line.strip().endswith('.'):
+            # Find the second to last period
+            second_last_period = content.rfind('.', 0, content.rfind('.'))
+            if second_last_period != -1:
+                return content[:second_last_period + 1]
+        else:
+            # Trim everything after the last period
+            last_period = last_line.rfind('.')
+            if last_period != -1:
+                lines[-1] = last_line[:last_period + 1]
+
+        return '\n'.join(lines)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -24,16 +54,45 @@ class MessageHandler(commands.Cog):
         if message.author == self.bot.user or isinstance(message.author, discord.Webhook):
             return
 
-        if (self.config.KEYWORD.lower() in message.content.lower()) and ("`" + self.config.KEYWORD.lower() + "`" not in message.content.lower()):
-            print(f'Keyword "{self.config.KEYWORD}" detected in channel {message.channel.name} (ID: {message.channel.id}).')
-            await self.handle_keyword(message)
+        if self.config.KEYWORD.lower() in message.content.lower() and f"`{self.config.KEYWORD.lower()}`" not in message.content.lower():
+            print(
+                f'Keyword "{self.config.KEYWORD}" detected in channel {message.channel.name} (ID: {message.channel.id}).')
+
+            # Check for options
+            options = message.content.split()[1:]  # Get all words after the keyword
+            suppress_name = "-s" in options
+
+            # Check for -n option and extract the name
+            custom_name = None
+            if "-n" in options:
+                name_index = options.index("-n") + 1
+                if name_index < len(options):
+                    custom_name = options[name_index]
+
+            # Check for -p option and extract the temperature
+            temperature = None
+            if "-p" in options:
+                p_index = options.index("-p") + 1
+                if p_index < len(options):
+                    try:
+                        temperature = float(options[p_index])
+                    except ValueError:
+                        print(f"Invalid temperature value: {options[p_index]}")
+                        temperature = None  # Default or handle error as needed
+
+            await self.handle_keyword(message, suppress_name, custom_name, temperature)
 
         await self.bot.process_commands(message)
 
-    async def handle_keyword(self, message):
+    async def handle_keyword(self, message, suppress_name=False, custom_name=None, temperature=None):
         """
         Handles the keyword detection by deleting the user's message,
         replacing it with 'Generating...', and interacting with the LLM agent.
+
+        Args:
+            message (discord.Message): The message that triggered the keyword.
+            suppress_name (bool): Whether to suppress adding the name at the end of the prompt.
+            custom_name (str, optional): A custom name to use instead of the author's display name.
         """
         try:
             # Delete the user's original message
@@ -60,6 +119,15 @@ class MessageHandler(commands.Cog):
                 print("Failed to move webhook for the replacement.")
                 return
 
+            # Create a View with Reroll, Prev, and Next buttons
+            view = View()
+            reroll_button = Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll")
+            prev_button = Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev", disabled=True)
+            next_button = Button(style=ButtonStyle.secondary, label="Next", custom_id="next", disabled=True)
+            view.add_item(prev_button)
+            view.add_item(reroll_button)
+            view.add_item(next_button)
+
             # Send 'Generating...' via webhook, capture the message object
             generating_content = "Generating..."
             reversed_username = message.author.display_name + "[oblique]"
@@ -67,8 +135,12 @@ class MessageHandler(commands.Cog):
                 name=webhook_name,
                 content=generating_content,
                 username=reversed_username,
-                avatar_url=message.author.display_avatar.url if message.author.display_avatar else None
+                avatar_url=message.author.display_avatar.url if message.author.display_avatar else None,
+                view=view
             )
+
+            # Initialize message history for this message
+            self.message_history[sent_message.id] = deque(maxlen=10)  # Store up to 10 generations per message
             if not sent_message:
                 print("Failed to send 'Generating...' message via webhook.")
                 return
@@ -79,8 +151,21 @@ class MessageHandler(commands.Cog):
                 'message': message,
                 'generating_message_id': sent_message.id,
                 'channel_id': message.channel.id,
-                'username': message.author.display_name,
-                'webhook': webhook_name
+                'username': custom_name or message.author.display_name,
+                'webhook': webhook_name,
+                'bot': self.bot,
+                'user_id': message.author.id,
+                'suppress_name': suppress_name,
+                'custom_name': custom_name,
+                'temperature': temperature  # Add this line
+            }
+
+            # Store the original options
+            self.message_history[sent_message.id] = {
+                'options': {
+                    'suppress_name': suppress_name,
+                    'custom_name': custom_name
+                }
             }
 
             # Interact with the LLM agent (stateful)
@@ -110,13 +195,15 @@ class MessageHandler(commands.Cog):
         async with self.agents_lock:
             if user_id not in self.agents:
                 # Define the callback function to handle the LLM's response
-                async def llm_callback(data, replacement_text):
+                async def llm_callback(data, replacement_text, page, total_pages):
                     """
                     Callback function to handle the LLM's response.
 
                     Args:
                         data (dict): Data containing 'generating_message_id', 'channel_id', 'username'.
                         replacement_text (str): The text generated by the LLM.
+                        page (int): The current page number.
+                        total_pages (int): The total number of pages.
                     """
                     try:
                         # Extract necessary information
@@ -124,6 +211,7 @@ class MessageHandler(commands.Cog):
                         webhook_name = data['webhook']
                         channel_id = data['channel_id']
                         username = data['username']
+                        user_id = data['message'].author.id
 
                         # Get the channel object
                         channel = self.bot.get_channel(channel_id)
@@ -131,16 +219,46 @@ class MessageHandler(commands.Cog):
                             print(f"Channel with ID {channel_id} not found.")
                             return
 
+                        # Update the message history
+                        if generating_message_id not in self.message_history:
+                            self.message_history[generating_message_id] = {'messages': deque(maxlen=10),
+                                                                           'options': data.get('options', {})}
+                        elif 'messages' not in self.message_history[generating_message_id]:
+                            self.message_history[generating_message_id]['messages'] = deque(maxlen=10)
 
-                        # Edit the 'Generating...' message with the LLM-generated replacement
+                        # Append the new replacement text
+                        self.message_history[generating_message_id]['messages'].append(replacement_text)
+                        self.message_current_index[generating_message_id] = len(
+                            self.message_history[generating_message_id]['messages']) - 1
+
+                        # Update button states
+                        history = self.message_history[generating_message_id]['messages']
+                        current_index = self.message_current_index[generating_message_id]
+                        view = View()
+                        view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
+                                             disabled=(current_index == 0)))
+                        view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
+                        view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
+                                             disabled=(current_index == len(history) - 1)))
+                        view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                        view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+
+                        # Add page information to the content
+                        content_with_page = f"{replacement_text}"
+
+                        # Edit the message with the LLM-generated replacement and updated view
                         await self.webhook_manager.edit_via_webhook(
                             name=webhook_name,
                             message_id=generating_message_id,
-                            new_content=replacement_text
+                            new_content=content_with_page,
+                            view=view
                         )
-                        print(f"Sent LLM-generated replacement for user '{username}'.")
+                        print(
+                            f"Sent LLM-generated replacement (page {page}/{total_pages}) with updated view for user '{username}'.")
                     except Exception as e:
                         print(f"Error sending LLM-generated replacement: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 agent = LLMAgent(name=f"Agent_{user_id}", config=self.config, callback=llm_callback)
                 self.agents[user_id] = agent
@@ -156,6 +274,141 @@ class MessageHandler(commands.Cog):
                 await agent.shutdown()
             self.agents.clear()
         print("MessageHandler Cog has been unloaded and agents have been shut down.")
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        try:
+            if interaction.type == discord.InteractionType.component:
+                custom_id = interaction.data["custom_id"]
+                if custom_id in ["reroll", "prev", "next", "trim", "delete"]:
+                    await interaction.response.defer()
+
+                    original_message = interaction.message
+                    user_id = interaction.user.id
+
+                    if custom_id == "delete":
+                        print(f"Delete button clicked by {interaction.user.display_name}")
+                        await self.webhook_manager.delete_webhook_message(
+                            name=next(iter(self.webhook_manager.webhook_objects)),
+                            message_id=original_message.id
+                        )
+                        print(f"Deleted message for {interaction.user.display_name}")
+                        return
+
+                    if custom_id == "reroll":
+                        print(f"Reroll button clicked by {interaction.user.display_name}")
+
+                        # Retrieve the original options
+                        original_options = self.message_history.get(original_message.id, {}).get('options', {})
+
+                        # Prepare data for the LLM agent
+                        data = {
+                            'message': original_message,
+                            'generating_message_id': original_message.id,
+                            'channel_id': interaction.channel_id,
+                            'username': original_options.get('custom_name') or interaction.user.display_name,
+                            'webhook': next(iter(self.webhook_manager.webhook_objects)),  # Get the first webhook name
+                            'suppress_name': original_options.get('suppress_name', False),
+                            'custom_name': original_options.get('custom_name')
+                        }
+
+                        # Edit the message to show "Regenerating..."
+                        await self.webhook_manager.edit_via_webhook(
+                            name=data['webhook'],
+                            message_id=original_message.id,
+                            new_content="Regenerating..."
+                        )
+                        print(f"Regenerating message for {data['username']}")
+
+                        # Interact with the LLM agent (stateful)
+                        agent = await self.get_or_create_agent(user_id)
+                        await agent.enqueue_message(data)
+
+                        # The button states and content will be updated in the LLM callback
+
+                    elif custom_id in ["prev", "next", "trim"]:
+                        print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
+
+                        if original_message.id in self.message_history:
+                            history = self.message_history[original_message.id]['messages']
+                            current_index = self.message_current_index.get(original_message.id, len(history) - 1)
+
+                            if custom_id == "trim":
+                                new_content = self.trim_message(history[current_index])
+                                history[current_index] = new_content
+                            else:
+                                new_index = current_index - 1 if custom_id == "prev" else current_index + 1
+                                if 0 <= new_index < len(history):
+                                    new_content = history[new_index]
+                                    self.message_current_index[original_message.id] = new_index
+                                    current_index = new_index
+                                else:
+                                    print(
+                                        f"Cannot go {custom_id} from the current message. Current index: {current_index}, New index: {new_index}, History length: {len(history)}")
+                                    return
+
+                            # Update the message content and button states
+                            view = View()
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
+                                                 disabled=(current_index == 0)))
+                            view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
+                                                 disabled=(current_index == len(history) - 1)))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+
+                            await self.webhook_manager.edit_via_webhook(
+                                name=next(iter(self.webhook_manager.webhook_objects)),
+                                message_id=original_message.id,
+                                new_content=new_content,
+                                view=view
+                            )
+                            print(f"Updated message after {custom_id} for {interaction.user.display_name}")
+        except Exception as e:
+            print(f"Error handling interaction: {e}")
+            import traceback
+            traceback.print_exc()
+            # Optionally, you can add more detailed error logging here
+
+    async def create_webhooks(self):
+        """
+        Creates webhook for 'general' channel if it doesn't already exist.
+        """
+        try:
+            # Find the 'general' channel
+            general_channel = discord.utils.get(self.bot.get_all_channels(), name='general')
+            if general_channel is None:
+                print("Error: 'general' channel not found. Available channels:")
+                for channel in self.bot.get_all_channels():
+                    print(f"- {channel.name} (ID: {channel.id})")
+                return
+
+            # Check if the webhook already exists in the webhook_manager
+            if 'oblique_general' in self.webhook_manager.webhook_objects:
+                print(f"Webhook 'oblique_general' already exists in webhook_manager.")
+                return
+
+            # Check if the webhook already exists in the channel
+            existing_webhooks = await general_channel.webhooks()
+            oblique_webhook = discord.utils.get(existing_webhooks, name='oblique_general')
+
+            if oblique_webhook:
+                # Use the existing webhook
+                print(f"Using existing webhook 'oblique_general' for 'general' channel (ID: {general_channel.id}).")
+                self.webhook_manager.webhook_objects['oblique_general'] = oblique_webhook
+            else:
+                # Create a new webhook if it doesn't exist
+                new_webhook = await self.webhook_manager.create_webhook('oblique_general', general_channel.id)
+                if new_webhook:
+                    print(f"Webhook 'oblique_general' created for 'general' channel (ID: {general_channel.id}).")
+                else:
+                    print(f"Failed to create webhook for 'general' channel (ID: {general_channel.id}).")
+
+        except Exception as e:
+            print(f"Error managing webhook: {e}")
+            import traceback
+            traceback.print_exc()
+
 
 # Asynchronous setup function for the Cog
 async def setup(bot):

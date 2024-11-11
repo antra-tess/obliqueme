@@ -1,6 +1,11 @@
 import asyncio
 import aiohttp
+import discord
+from collections import deque
 from bs4 import BeautifulSoup  # For stripping HTML content
+from discord import ButtonStyle
+from discord.ui import Button, View
+
 
 class LLMAgent:
     def __init__(self, name, config, callback):
@@ -24,76 +29,102 @@ class LLMAgent:
         Processes a single message: formats, sends to LLM, handles response.
 
         Args:
-            data (dict): Contains 'message', 'generating_message_id', 'channel_id', 'username'.
+            data (dict): Contains 'message', 'generating_message_id', 'channel_id', 'username', 'bot', 'webhook', 'max_tokens'.
         """
         try:
-            # Extract necessary info
             message = data['message']
+            bot = data.get('bot')
+            max_tokens = data.get('max_tokens', self.config.MAX_RESPONSE_LENGTH)
+            temperature = data.get('temperature', 0.7)  # Default to 0.7 if not specified
 
-            # Step 1: Fetch and format the last 50 messages
-            formatted_messages = await self.format_messages(message)
+            formatted_messages = await self.format_messages(message, bot)
+            custom_name = data.get('custom_name')
+            name = (custom_name or message.author.display_name).replace("[oblique]", "")
 
-            name = message.author.display_name
-            # remove "[oblique]" from name if it exists
-            if name.endswith("[oblique]"):
-                name = name[:-9]
+            prompt = formatted_messages
+            if not data.get('suppress_name', False):
+                prompt += f'<{name}>\n'
 
-            # Step 2: Append the triggering message tag
-            prompt = formatted_messages + f'<msg username="{name}">'
+            # Request three completions concurrently
+            completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
+            completions = await asyncio.gather(*completion_tasks)
 
-            # Step 3: Send the prompt to OpenRouter
-            response_text = await self.send_completion_request(prompt)
-            print("response_text", response_text)
+            # Process each completion and send it to the callback
+            for i, response_text in enumerate(completions):
+                replacement_text = self.process_response(response_text)
+                await self.callback(data, replacement_text, page=i + 1, total_pages=3)
 
-            # Step 4: Process the LLM response
-            replacement_text = self.process_response(response_text)
+            user_id = message.author.id
+            if not hasattr(self, 'message_history'):
+                self.message_history = {}
+            if user_id not in self.message_history:
+                self.message_history[user_id] = deque(maxlen=10)
 
-            # Step 5: Use the replacement text via the callback
-            await self.callback(data, replacement_text)
+            self.message_history[user_id].append({
+                'id': data['generating_message_id'],
+                'content': [self.process_response(text) for text in completions]
+            })
 
-            print(f"LLMAgent '{self.name}' generated replacement text.")
+            print(f"LLMAgent '{self.name}' generated 3 replacement texts.")
 
         except Exception as e:
             print(f"Error in LLMAgent '{self.name}': {e}")
+            import traceback
+            traceback.print_exc()
 
-    async def format_messages(self, message):
+    async def format_messages(self, message, bot=None):
         """
         Formats the last 50 messages into XML tags.
 
         Args:
             message (discord.Message): The triggering message.
+            bot (discord.Client, optional): The bot instance.
 
         Returns:
             str: Formatted XML string.
         """
-        channel = message.channel
+        channel = message.channel if isinstance(message, discord.Message) else bot.get_channel(message.channel_id)
         formatted = []
         try:
-            async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT, before=message):
-                #if msg.author.bot:
+            async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
+                                             before=message if isinstance(message, discord.Message) else None):
+                # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
                 username = msg.author.display_name
+                username = username.replace("[oblique]", "")
                 content = msg.content
 
+                #                print("content", "[" + content + "]")
+                if content == "oblique_clear":
+                    print("clearing")
+                    break
+
                 # Strip HTML content
-                soup = BeautifulSoup(content, "html.parser")
-                clean_content = soup.get_text()
+                try:
+                    soup = BeautifulSoup(content, "html.parser")
+                    clean_content = soup.get_text()
+                except Exception as e:
+                    clean_content = content
+
+                if clean_content.startswith(".."):
+                    continue
 
                 # Preserve newlines
                 clean_content = clean_content.replace('\n', '\\n')  # Escape newlines
 
-                formatted.append(f'<msg username="{username}">{clean_content}</msg>\n')
+                formatted.append(f'<{username}> {clean_content}\n')
         except Exception as e:
             print(f"Error formatting messages: {e}")
         formatted.reverse()
         return "".join(formatted)
 
-    async def send_completion_request(self, prompt):
+    async def send_completion_request(self, prompt, max_tokens, temperature):
         """
         Sends the prompt to OpenRouter's completion endpoint.
 
         Args:
             prompt (str): The formatted XML prompt.
+            max_tokens (int): The maximum number of tokens for the response.
 
         Returns:
             str: The response text from the LLM.
@@ -104,56 +135,43 @@ class LLMAgent:
             "X-Title": "Oblique"
         }
 
+        if temperature is None:
+            temperature = 0.8
+
         payload = {
-            "model": "meta-llama/llama-3.1-405b",
+            "model": "meta-llama/Meta-Llama-3.1-405B",
             "prompt": prompt,
-            "max_tokens": self.config.MAX_RESPONSE_LENGTH,
-            "temperature": 0.9,
-            "stop": ["</msg>"],  # Assuming </xml> is used to terminate
+            "max_tokens": max_tokens,
+            "temperature": temperature,  # Use the temperature parameter
             "provider": {
                 "quantizations": ["bf16"]
             }
         }
+        print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
             try:
                 async with self.rate_limit:
-                    print("Sending llm request, length", len(prompt))
-                    # save payload to payload.json
-                    # with open("payload.json", "w") as f:
-                    #     import json
-                    #     json.dump(payload, f)
-                    # # save headers as a curl command to curl.sh
-                    # with open("curl.sh", "w") as f:
-                    #     f.write(f"curl -X POST {self.config.OPENROUTER_ENDPOINT} \\\n")
-                    #     for key, value in headers.items():
-                    #         f.write(f"  -H '{key}: {value}' \\\n")
-                    #     f.write(f"  -d @payload.json")
-
-                    async with self.session.post(self.config.OPENROUTER_ENDPOINT, json=payload, headers=headers) as resp:
-                        print("Status", resp.status)
+                    print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}")
+                    async with self.session.post(self.config.OPENROUTER_ENDPOINT, json=payload,
+                                                 headers=headers) as resp:
                         if resp.status != 200:
                             error_text = await resp.text()
                             print(f"OpenRouter API returned status {resp.status}: {error_text}")
-                            print(f"Prompt: {prompt}")
-                            print(resp)
                             return ""
                         data = await resp.json()
-                        print("LLM", data)
                         if 'error' in data:
                             print(f"OpenRouter API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
-                                print("Rate limit (error code 429) hit in response. Retrying in 1 second...")
+                                print("Rate limit hit. Retrying in 1 second...")
                                 await asyncio.sleep(1)
-                                continue  # Retr
+                                continue
                             return ""
                         return data.get("choices", [{}])[0].get("text", "")
             except aiohttp.ClientError as e:
-                print(f"HTTP Client Error: {e}. Retrying in 1 second...")
+                print(f"HTTP Client Error: {e}. Retrying in 5 seconds...")
                 await asyncio.sleep(5)
-                continue  # Retry the request
             except asyncio.CancelledError:
-                # Allow the task to be cancelled
                 raise
             except Exception as e:
                 print(f"Error sending completion request: {e}")
