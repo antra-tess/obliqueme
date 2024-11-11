@@ -507,8 +507,9 @@ class MessageHandler(commands.Cog):
                         
                         if custom_id == "commit":
                             # Remove all buttons and keep the content
+                            webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
                             await self.webhook_manager.edit_via_webhook(
-                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                name=webhook_name,
                                 message_id=original_message.id,
                                 new_content=original_message.content,
                                 guild_id=interaction.guild_id,
