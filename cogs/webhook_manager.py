@@ -104,11 +104,12 @@ class WebhookManager(commands.Cog):
                 print(f"Error managing webhook '{name}': {e}")
                 return None
 
-    async def move_webhook(self, name, channel):
+    async def move_webhook(self, guild_id, name, channel):
         """
-        Moves the specified webhook to a different channel.
+        Moves the specified webhook to a different channel within the same guild.
 
         Args:
+            guild_id (int): The ID of the guild.
             name (str): The name of the webhook.
             channel (discord.TextChannel): The target channel.
 
@@ -116,16 +117,21 @@ class WebhookManager(commands.Cog):
             discord.Webhook: The updated webhook object.
         """
         async with self.lock:
-            webhook = self.webhook_objects.get(name)
+            webhook = self.webhook_objects.get(guild_id, {}).get(name)
             if not webhook:
-                print(f"Webhook '{name}' not found.")
+                print(f"Webhook '{name}' not found in guild {guild_id}.")
                 return None
+            
+            if channel.guild.id != guild_id:
+                print(f"Cannot move webhook '{name}' to a different guild.")
+                return None
+                
             try:
                 await webhook.edit(channel=channel)
-                print(f"Webhook '{name}' moved to channel '{channel.name}' (ID: {channel.id}).")
+                print(f"Webhook '{name}' moved to channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}.")
                 return webhook
             except Exception as e:
-                print(f"Error moving webhook '{name}': {e}")
+                print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
                 return None
 
     async def send_via_webhook(self, name, content, username, avatar_url, guild_id, view=None):
