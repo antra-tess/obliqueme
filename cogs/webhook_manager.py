@@ -76,12 +76,18 @@ class WebhookManager(commands.Cog):
         if channel is None:
             print(f"Error: Channel with ID {channel_id} not found.")
             return None
+
+        guild_id = channel.guild.id
         async with self.lock:
             try:
-                # Check if the webhook already exists in our objects
-                if name in self.webhook_objects:
-                    print(f"Webhook '{name}' already exists in our objects.")
-                    return self.webhook_objects[name]
+                # Initialize guild dict if it doesn't exist
+                if guild_id not in self.webhook_objects:
+                    self.webhook_objects[guild_id] = {}
+
+                # Check if the webhook already exists in our objects for this guild
+                if name in self.webhook_objects[guild_id]:
+                    print(f"Webhook '{name}' already exists in guild {guild_id}.")
+                    return self.webhook_objects[guild_id][name]
 
                 # Check if the webhook already exists in the channel
                 existing_webhooks = await channel.webhooks()
@@ -89,19 +95,16 @@ class WebhookManager(commands.Cog):
 
                 if existing_webhook:
                     print(f"Webhook '{name}' already exists in channel '{channel.name}' (ID: {channel.id}).")
-                    self.webhook_objects[name] = existing_webhook
-                    self.webhook_urls[name] = existing_webhook.url
+                    self.webhook_objects[guild_id][name] = existing_webhook
                     return existing_webhook
 
                 # Create a new webhook if it doesn't exist
                 webhook = await channel.create_webhook(name=name)
-                self.webhook_objects[name] = webhook
-                self.webhook_urls[name] = webhook.url
-
-                print(f"Webhook '{name}' created in channel '{channel.name}' (ID: {channel.id}).")
+                self.webhook_objects[guild_id][name] = webhook
+                print(f"Webhook '{name}' created in channel '{channel.name}' (ID: {channel.id}) for guild {guild_id}.")
                 return webhook
             except Exception as e:
-                print(f"Error managing webhook '{name}': {e}")
+                print(f"Error managing webhook '{name}' in guild {guild_id}: {e}")
                 return None
 
     async def move_webhook(self, guild_id, name, channel):

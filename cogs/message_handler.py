@@ -23,7 +23,6 @@ class MessageHandler(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print('MessageHandler Cog is ready.')
-        await self.create_webhooks()
         await self.webhook_manager.initialize_webhooks()
 
     def trim_message(self, content):
@@ -375,44 +374,6 @@ class MessageHandler(commands.Cog):
             traceback.print_exc()
             # Optionally, you can add more detailed error logging here
 
-    async def create_webhooks(self):
-        """
-        Creates webhook for 'general' channel if it doesn't already exist.
-        """
-        try:
-            # Find the 'general' channel
-            general_channel = discord.utils.get(self.bot.get_all_channels(), name='general')
-            if general_channel is None:
-                print("Error: 'general' channel not found. Available channels:")
-                for channel in self.bot.get_all_channels():
-                    print(f"- {channel.name} (ID: {channel.id})")
-                return
-
-            # Check if the webhook already exists in the webhook_manager
-            if 'oblique_general' in self.webhook_manager.webhook_objects:
-                print(f"Webhook 'oblique_general' already exists in webhook_manager.")
-                return
-
-            # Check if the webhook already exists in the channel
-            existing_webhooks = await general_channel.webhooks()
-            oblique_webhook = discord.utils.get(existing_webhooks, name='oblique_general')
-
-            if oblique_webhook:
-                # Use the existing webhook
-                print(f"Using existing webhook 'oblique_general' for 'general' channel (ID: {general_channel.id}).")
-                self.webhook_manager.webhook_objects['oblique_general'] = oblique_webhook
-            else:
-                # Create a new webhook if it doesn't exist
-                new_webhook = await self.webhook_manager.create_webhook('oblique_general', general_channel.id)
-                if new_webhook:
-                    print(f"Webhook 'oblique_general' created for 'general' channel (ID: {general_channel.id}).")
-                else:
-                    print(f"Failed to create webhook for 'general' channel (ID: {general_channel.id}).")
-
-        except Exception as e:
-            print(f"Error managing webhook: {e}")
-            import traceback
-            traceback.print_exc()
 
 
 # Asynchronous setup function for the Cog
