@@ -58,7 +58,11 @@ class LLMAgent:
                 replacement_text = self.process_response(response_text)
                 await self.callback(data, replacement_text, page=i + 1, total_pages=3)
 
-            user_id = message.author.id
+            # Handle both Message and Interaction objects
+            if isinstance(message, discord.Interaction):
+                user_id = message.user.id
+            else:
+                user_id = message.author.id
             if not hasattr(self, 'message_history'):
                 self.message_history = {}
             if user_id not in self.message_history:

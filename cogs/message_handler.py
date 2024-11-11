@@ -312,7 +312,11 @@ class MessageHandler(commands.Cog):
                         webhook_name = data['webhook']
                         channel_id = data['channel_id']
                         username = data['username']
-                        user_id = data['message'].author.id
+                        # Handle both Message and Interaction objects
+                        if isinstance(data['message'], discord.Interaction):
+                            user_id = data['message'].user.id
+                        else:
+                            user_id = data['message'].author.id
 
                         # Get the channel object
                         channel = self.bot.get_channel(channel_id)
