@@ -29,6 +29,8 @@ def main():
     async def run_bot():
         async with bot:
             await load_cogs()
+            # Sync the command tree with Discord
+            await bot.tree.sync()
             await bot.start(Config.BOT_TOKEN)
 
     try:

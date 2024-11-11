@@ -58,6 +58,8 @@ class MessageHandler(commands.Cog):
     async def on_ready(self):
         print('MessageHandler Cog is ready.')
         await self.webhook_manager.initialize_webhooks()
+        # Sync the command tree with Discord
+        await self.bot.tree.sync()
 
     def trim_message(self, content):
         lines = content.split('\n')
