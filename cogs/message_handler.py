@@ -219,11 +219,11 @@ class MessageHandler(commands.Cog):
             # Join remaining words as seed
             seed = " ".join(seed_words) if seed_words else None
 
-            await self.handle_keyword(message, suppress_name, custom_name, temperature, seed)
+            await self.handle_keyword(message, suppress_name, custom_name, temperature, seed, mode)
 
         await self.bot.process_commands(message)
 
-    async def handle_keyword(self, message, suppress_name=False, custom_name=None, temperature=None, seed=None):
+    async def handle_keyword(self, message, suppress_name=False, custom_name=None, temperature=None, seed=None, mode="self"):
         """
         Handles the keyword detection by deleting the user's message,
         replacing it with 'Generating...', and interacting with the LLM agent.
