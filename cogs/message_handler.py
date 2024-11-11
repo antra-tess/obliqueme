@@ -97,7 +97,8 @@ class MessageHandler(commands.Cog):
                 'user_id': interaction.user.id,
                 'suppress_name': suppress_name,
                 'custom_name': custom_name,
-                'temperature': temperature
+                'temperature': temperature,
+                'seed': seed  # Add seed text
             }
 
             # Get or create agent and process request
@@ -284,7 +285,8 @@ class MessageHandler(commands.Cog):
                 'user_id': message.author.id,
                 'suppress_name': suppress_name,
                 'custom_name': custom_name,
-                'temperature': temperature  # Add this line
+                'temperature': temperature,
+                'seed': seed  # Add seed text
             }
 
             # Store the original options

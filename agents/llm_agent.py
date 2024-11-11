@@ -45,8 +45,11 @@ class LLMAgent:
             else:
                 name = (custom_name or message.author.display_name).replace("[oblique]", "")
 
+            # Add seed text if provided
             prompt = formatted_messages
-            if not data.get('suppress_name', False):
+            if data.get('seed'):
+                prompt += f'<{name}> {data["seed"]}\n'
+            elif not data.get('suppress_name', False):
                 prompt += f'<{name}>\n'
 
             # Request three completions concurrently
