@@ -234,9 +234,15 @@ class MessageHandler(commands.Cog):
             custom_name (str, optional): A custom name to use instead of the author's display name.
         """
         try:
-            # Delete the user's original message
-            await message.delete()
-            print(f'Deleted message from {message.author.display_name} in channel {message.channel.name}.')
+            # Check if bot has permission to delete messages
+            if message.guild.me.guild_permissions.manage_messages:
+                # Delete the user's original message
+                await message.delete()
+                print(f'Deleted message from {message.author.display_name} in channel {message.channel.name}.')
+            else:
+                # Suggest using slash command instead
+                await message.reply("I don't have permission to delete messages. Try using `/oblique` instead!", delete_after=5)
+                print(f'No permission to delete messages in {message.guild.name}, suggested slash command.')
 
             # Get the channel object
             # channel = self.bot.get_channel(message.channel_id)
