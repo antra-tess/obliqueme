@@ -137,6 +137,7 @@ class MessageHandler(commands.Cog):
                 content=generating_content,
                 username=reversed_username,
                 avatar_url=message.author.display_avatar.url if message.author.display_avatar else None,
+                guild_id=message.guild.id,
                 view=view
             )
 

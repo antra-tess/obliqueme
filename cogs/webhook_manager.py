@@ -128,7 +128,7 @@ class WebhookManager(commands.Cog):
                 print(f"Error moving webhook '{name}': {e}")
                 return None
 
-    async def send_via_webhook(self, name, content, username, avatar_url, view=None):
+    async def send_via_webhook(self, name, content, username, avatar_url, guild_id, view=None):
         """
         Sends a message via the specified webhook.
 
@@ -137,6 +137,7 @@ class WebhookManager(commands.Cog):
             content (str): The message content.
             username (str): The username to display.
             avatar_url (str): The avatar URL to display.
+            guild_id (int): The ID of the guild.
             view (discord.ui.View, optional): The view containing components to add to the message.
 
         Returns:
@@ -145,7 +146,7 @@ class WebhookManager(commands.Cog):
         if self.initialized == False:
             await self.initialize_webhooks()
 
-        webhook = await self.get_webhook(name)
+        webhook = await self.get_webhook(guild_id, name)
         if not webhook:
             print(f"Webhook '{name}' not found.")
             return None
