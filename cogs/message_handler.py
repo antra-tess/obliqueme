@@ -453,9 +453,8 @@ class MessageHandler(commands.Cog):
                                 guild_id=interaction.guild_id,
                                 view=None  # No buttons
                             )
-                            # Clean up message history
-                            if original_message.id in self.message_history:
-                                del self.message_history[original_message.id]
+                            # Clean up context
+                            await self.generation_manager.remove_context(original_message.id)
                             print(f"Committed message for {interaction.user.display_name}")
                         else:
                             # Handle delete and cancel
@@ -466,9 +465,8 @@ class MessageHandler(commands.Cog):
                             )
                             print(f"Deleted message for {interaction.user.display_name}")
                             
-                            if custom_id == "cancel":
-                                if original_message.id in self.message_history:
-                                    del self.message_history[original_message.id]
+                            # Clean up context for both delete and cancel
+                            await self.generation_manager.remove_context(original_message.id)
                         return
 
                     if custom_id == "reroll":
