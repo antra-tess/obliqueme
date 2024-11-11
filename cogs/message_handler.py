@@ -96,11 +96,16 @@ class MessageHandler(commands.Cog):
                 'message': interaction,
                 'generating_message_id': sent_message.id,
                 'channel_id': interaction.channel_id,
-                'username': custom_name or interaction.user.display_name,
+                'username': context.parameters.get('custom_name') or interaction.user.display_name,
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': interaction.user.id,
-                'context': context  # Pass the context instead of individual parameters
+                'context': context,
+                'mode': context.parameters.get('mode', 'self'),
+                'seed': context.parameters.get('seed'),
+                'suppress_name': context.parameters.get('suppress_name', False),
+                'custom_name': context.parameters.get('custom_name'),
+                'temperature': context.parameters.get('temperature')
             }
 
             # Get or create agent and process request
@@ -303,11 +308,16 @@ class MessageHandler(commands.Cog):
                 'message': message,
                 'generating_message_id': sent_message.id,
                 'channel_id': message.channel.id,
-                'username': custom_name or message.author.display_name,
+                'username': context.parameters.get('custom_name') or message.author.display_name,
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': message.author.id,
-                'context': context  # Pass the context instead of individual parameters
+                'context': context,
+                'mode': context.parameters.get('mode', 'self'),
+                'seed': context.parameters.get('seed'),
+                'suppress_name': context.parameters.get('suppress_name', False),
+                'custom_name': context.parameters.get('custom_name'),
+                'temperature': context.parameters.get('temperature')
             }
 
             # Interact with the LLM agent (stateful)
@@ -478,7 +488,12 @@ class MessageHandler(commands.Cog):
                             'channel_id': interaction.channel_id,
                             'username': context.parameters.get('custom_name') or interaction.user.display_name,
                             'webhook': next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
-                            'context': context  # Pass the entire context
+                            'context': context,
+                            'mode': context.parameters.get('mode', 'self'),
+                            'seed': context.parameters.get('seed'),
+                            'suppress_name': context.parameters.get('suppress_name', False),
+                            'custom_name': context.parameters.get('custom_name'),
+                            'temperature': context.parameters.get('temperature')
                         }
 
                         # Edit the message to show "Regenerating..."
