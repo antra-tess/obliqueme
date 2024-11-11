@@ -64,6 +64,10 @@ class MessageHandler(commands.Cog):
             cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
             view.add_item(cancel_button)
 
+            # Initialize variables
+            target_member_id = None
+            avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
+            
             # Handle custom name and avatar
             if custom_name:
                 target_member = self.find_member_by_name(custom_name, interaction.guild)
@@ -76,13 +80,10 @@ class MessageHandler(commands.Cog):
                     print(f"Found member: {display_name} (ID: {target_member_id}), avatar URL: {avatar_url}")
                 else:
                     display_name = custom_name
-                    avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
-                    target_member_id = None
                     print(f"Member '{custom_name}' not found in guild {interaction.guild.name}")
                 webhook_username = f"{display_name}[oblique:{interaction.user.display_name}]"
             else:
                 webhook_username = f"{interaction.user.display_name}[oblique]"
-                avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
 
             # Send initial message
             generating_content = "Oblique: Generating..."
