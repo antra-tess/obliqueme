@@ -58,7 +58,7 @@ class LLMAgent:
 
             # Process each completion and send it to the callback
             for i, response_text in enumerate(completions):
-                replacement_text = self.process_response(response_text)
+                replacement_text = self.process_response(response_text, data)
                 await self.callback(data, replacement_text, page=i + 1, total_pages=3)
 
             # Handle both Message and Interaction objects
@@ -190,12 +190,13 @@ class LLMAgent:
         print("Failed to send completion request after 10 retries.")
         return ""
 
-    def process_response(self, response_text):
+    def process_response(self, response_text, data=None):
         """
         Processes the LLM response to extract the required text.
 
         Args:
             response_text (str): The raw response from the LLM.
+            data (dict): The data dictionary containing mode and username information.
 
         Returns:
             str: The processed replacement text.
@@ -217,7 +218,26 @@ class LLMAgent:
         # Unescape any escaped newlines
         processed_text = processed_text.replace('\\n', '\n')
 
-        return processed_text
+        # Handle different modes
+        if data and data.get('mode') == 'self':
+            # Get the username for filtering
+            username = data.get('username', '').replace("[oblique]", "")
+            
+            # Split into lines and filter for user's messages
+            lines = processed_text.split('\n')
+            user_messages = []
+            for line in lines:
+                if line.strip():
+                    # Check if line starts with a username tag
+                    if line.startswith(f'<{username}>'):
+                        # Remove the username tag
+                        message = line[len(f'<{username}>'):]
+                        user_messages.append(message.strip())
+            
+            # Join the filtered messages
+            return '\n'.join(user_messages)
+        else:
+            return processed_text
 
     async def enqueue_message(self, data):
         await self.queue.put(data)
