@@ -72,12 +72,18 @@ class WebhookManager(commands.Cog):
             
             # Get or create webhook
             webhook_name = f'oblique_{next_index + 1}'
+            print(f"Selected webhook name: {webhook_name}")
+            
             if webhook_name not in self.webhook_objects.get(guild_id, {}):
+                print(f"Creating new webhook {webhook_name}")
                 webhook = await self.create_webhook(webhook_name, channel_id)
             else:
+                print(f"Found existing webhook {webhook_name}")
                 webhook = self.webhook_objects[guild_id][webhook_name]
+                print(f"Moving webhook to channel {channel_id}")
                 webhook = await self.move_webhook(guild_id, webhook_name, self.bot.get_channel(channel_id))
             
+            print(f"Returning webhook {webhook_name}: {webhook}")
             return webhook_name, webhook
 
     async def get_webhook(self, guild_id, name):
@@ -185,12 +191,20 @@ class WebhookManager(commands.Cog):
         Returns:
             discord.Message: The sent webhook message object.
         """
+        print(f"\nAttempting to send message via webhook '{name}'")
+        print(f"Guild ID: {guild_id}")
+        print(f"Content: {content}")
+        print(f"Username: {username}")
+        print(f"Avatar URL: {avatar_url}")
+        
         if self.initialized == False:
+            print("Initializing webhooks...")
             await self.initialize_webhooks()
 
         webhook = await self.get_webhook(guild_id, name)
         if not webhook:
-            print(f"Webhook '{name}' not found.")
+            print(f"Webhook '{name}' not found in guild {guild_id}")
+            print(f"Available webhooks: {list(self.webhook_objects.get(guild_id, {}).keys())}")
             return None
         try:
             sent_message = await webhook.send(
