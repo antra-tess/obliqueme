@@ -70,9 +70,12 @@ class MessageHandler(commands.Cog):
                 if target_member:
                     display_name = target_member.display_name
                     avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
+                    # Store the target member's ID for avatar updates
+                    target_member_id = target_member.id
                 else:
                     display_name = custom_name
                     avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
+                    target_member_id = None
                 webhook_username = f"{display_name}[oblique:{interaction.user.display_name}]"
             else:
                 webhook_username = f"{interaction.user.display_name}[oblique]"
@@ -101,7 +104,9 @@ class MessageHandler(commands.Cog):
                 seed=seed,
                 suppress_name=suppress_name,
                 custom_name=custom_name,
-                temperature=temperature
+                temperature=temperature,
+                avatar_url=avatar_url,
+                target_member_id=target_member_id
             )
             await self.generation_manager.register_message(context, sent_message.id)
 
@@ -519,6 +524,12 @@ class MessageHandler(commands.Cog):
                             print(f"No context found for message {original_message.id}")
                             return
 
+                        # Get fresh avatar URL if we have a target member
+                        avatar_url = context.parameters.get('avatar_url')
+                        if target_member_id := context.parameters.get('target_member_id'):
+                            if target_member := interaction.guild.get_member(target_member_id):
+                                avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
+
                         # Prepare data for the LLM agent
                         data = {
                             'message': original_message,
@@ -531,7 +542,8 @@ class MessageHandler(commands.Cog):
                             'seed': context.parameters.get('seed'),
                             'suppress_name': context.parameters.get('suppress_name', False),
                             'custom_name': context.parameters.get('custom_name'),
-                            'temperature': context.parameters.get('temperature')
+                            'temperature': context.parameters.get('temperature'),
+                            'avatar_url': avatar_url
                         }
 
                         # Edit the message to show "Regenerating..."

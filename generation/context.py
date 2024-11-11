@@ -11,7 +11,8 @@ class GenerationContext:
             'seed': parameters.get('seed'),
             'suppress_name': parameters.get('suppress_name', False),
             'custom_name': parameters.get('custom_name'),
-            'temperature': parameters.get('temperature')
+            'temperature': parameters.get('temperature'),
+            'avatar_url': parameters.get('avatar_url')
         }
         self.history = deque(maxlen=10)
         self.current_index = 0
