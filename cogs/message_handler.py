@@ -7,6 +7,7 @@ from discord.ui import Button, View
 import asyncio
 from agents.llm_agent import LLMAgent
 from collections import deque
+from generation.context import GenerationManager
 
 
 class MessageHandler(commands.Cog):
