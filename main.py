@@ -15,6 +15,7 @@ def main():
     # Initialize bot with intents
     intents = discord.Intents.default()
     intents.message_content = True  # Ensure the bot can read message content
+    intents.members = True  # Enable members intent
 
     bot = commands.Bot(
         command_prefix='!', 
