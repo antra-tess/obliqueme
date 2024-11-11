@@ -1,6 +1,8 @@
 import asyncio
 import aiohttp
 import discord
+import os
+from datetime import datetime
 from collections import deque
 from bs4 import BeautifulSoup  # For stripping HTML content
 from discord import ButtonStyle
@@ -17,6 +19,10 @@ class LLMAgent:
         self.session = aiohttp.ClientSession()
         self.task = asyncio.create_task(self.process_queue())
         self.rate_limit = asyncio.Semaphore(5)  # Adjust based on API rate limits
+        
+        # Set up logging directory
+        self.log_dir = "logs"
+        os.makedirs(self.log_dir, exist_ok=True)
 
     async def process_queue(self):
         while True:
@@ -140,6 +146,10 @@ class LLMAgent:
         Returns:
             str: The response text from the LLM.
         """
+        # Create log file name with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        log_file = os.path.join(self.log_dir, f"{self.name}_{timestamp}.log")
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
@@ -153,11 +163,22 @@ class LLMAgent:
             "model": "meta-llama/Meta-Llama-3.1-405B",
             "prompt": prompt,
             "max_tokens": max_tokens,
-            "temperature": temperature,  # Use the temperature parameter
+            "temperature": temperature,
             "provider": {
                 "quantizations": ["bf16"]
             }
         }
+
+        # Log the request
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write("=== REQUEST ===\n")
+            f.write(f"Timestamp: {timestamp}\n")
+            f.write(f"Temperature: {temperature}\n")
+            f.write(f"Max Tokens: {max_tokens}\n")
+            f.write("=== PROMPT ===\n")
+            f.write(prompt)
+            f.write("\n")
+
         print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
@@ -166,10 +187,19 @@ class LLMAgent:
                     print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}")
                     async with self.session.post(self.config.OPENROUTER_ENDPOINT, json=payload,
                                                  headers=headers) as resp:
+                        response_text = await resp.text()
+                        
+                        # Log the raw response
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            f.write("\n=== RESPONSE ===\n")
+                            f.write(f"Status: {resp.status}\n")
+                            f.write(response_text)
+                            f.write("\n")
+
                         if resp.status != 200:
-                            error_text = await resp.text()
-                            print(f"OpenRouter API returned status {resp.status}: {error_text}")
+                            print(f"OpenRouter API returned status {resp.status}: {response_text}")
                             return ""
+                        
                         data = await resp.json()
                         if 'error' in data:
                             print(f"OpenRouter API returned error: {data['error']}")
@@ -178,7 +208,16 @@ class LLMAgent:
                                 await asyncio.sleep(1)
                                 continue
                             return ""
-                        return data.get("choices", [{}])[0].get("text", "")
+                        
+                        result = data.get("choices", [{}])[0].get("text", "")
+                        
+                        # Log the extracted result
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            f.write("\n=== EXTRACTED RESULT ===\n")
+                            f.write(result)
+                            f.write("\n")
+                            
+                        return result
             except aiohttp.ClientError as e:
                 print(f"HTTP Client Error: {e}. Retrying in 5 seconds...")
                 await asyncio.sleep(5)
