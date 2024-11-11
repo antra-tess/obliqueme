@@ -54,14 +54,10 @@ class MessageHandler(commands.Cog):
                 await interaction.followup.send("Failed to set up webhook.", ephemeral=True)
                 return
 
-            # Create view with buttons
+            # Create a View with just the Cancel button for generation state
             view = View()
-            reroll_button = Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll")
-            prev_button = Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev", disabled=True)
-            next_button = Button(style=ButtonStyle.secondary, label="Next", custom_id="next", disabled=True)
-            view.add_item(prev_button)
-            view.add_item(reroll_button)
-            view.add_item(next_button)
+            cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
+            view.add_item(cancel_button)
 
             # Send initial message
             generating_content = "Oblique: Generating..."
@@ -221,14 +217,10 @@ class MessageHandler(commands.Cog):
                 print("Failed to move webhook for the replacement.")
                 return
 
-            # Create a View with Reroll, Prev, and Next buttons
+            # Create a View with just the Cancel button for generation state
             view = View()
-            reroll_button = Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll")
-            prev_button = Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev", disabled=True)
-            next_button = Button(style=ButtonStyle.secondary, label="Next", custom_id="next", disabled=True)
-            view.add_item(prev_button)
-            view.add_item(reroll_button)
-            view.add_item(next_button)
+            cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
+            view.add_item(cancel_button)
 
             # Send 'Generating...' via webhook, capture the message object
             generating_content = "Oblique: Generating..."
@@ -390,20 +382,25 @@ class MessageHandler(commands.Cog):
         try:
             if interaction.type == discord.InteractionType.component:
                 custom_id = interaction.data["custom_id"]
-                if custom_id in ["reroll", "prev", "next", "trim", "delete"]:
+                if custom_id in ["reroll", "prev", "next", "trim", "delete", "cancel"]:
                     await interaction.response.defer()
 
                     original_message = interaction.message
                     user_id = interaction.user.id
 
-                    if custom_id == "delete":
-                        print(f"Delete button clicked by {interaction.user.display_name}")
+                    if custom_id in ["delete", "cancel"]:
+                        print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
                         await self.webhook_manager.delete_webhook_message(
                             name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
                             message_id=original_message.id,
                             guild_id=interaction.guild_id
                         )
                         print(f"Deleted message for {interaction.user.display_name}")
+                        
+                        if custom_id == "cancel":
+                            # TODO: Add logic to cancel the generation in the LLM agent
+                            if original_message.id in self.message_history:
+                                del self.message_history[original_message.id]
                         return
 
                     if custom_id == "reroll":
