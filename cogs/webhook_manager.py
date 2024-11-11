@@ -12,7 +12,7 @@ class WebhookManager(commands.Cog):
         super().__init__()  # Initialize the superclass
         self.bot = bot
         self.webhook_urls = webhook_urls
-        self.webhook_objects = {}
+        self.webhook_objects = {}  # Format: {guild_id: {webhook_name: webhook}}
         self.lock = asyncio.Lock()
         self.initialized = False
 
@@ -25,40 +25,41 @@ class WebhookManager(commands.Cog):
         Initializes webhook objects from the webhook_urls configuration.
         """
         self.initialized = True
-        # Pull all webhooks belonging to the bot
-        all_webhooks = []
         for guild in self.bot.guilds:
+            self.webhook_objects[guild.id] = {}
             guild_webhooks = await guild.webhooks()
-            all_webhooks.extend(guild_webhooks)
-        bot_webhooks = [webhook for webhook in all_webhooks if webhook.user == self.bot.user]
-
-        for webhook in bot_webhooks:
-            self.webhook_objects[webhook.name] = webhook
-            print(f"Found existing webhook '{webhook.name}': {webhook.url}")
+            bot_webhooks = [webhook for webhook in guild_webhooks if webhook.user == self.bot.user]
+            
+            for webhook in bot_webhooks:
+                self.webhook_objects[guild.id][webhook.name] = webhook
+                print(f"Found existing webhook '{webhook.name}' in guild {guild.id}: {webhook.url}")
 
         # Initialize any remaining webhooks from the webhook_urls configuration
         for name, url in self.webhook_urls.items():
-            if name not in self.webhook_objects:
-                try:
-                    webhook_id, webhook_token = parse_webhook_url(url)
-                    webhook = await self.bot.fetch_webhook(webhook_id)
-                    self.webhook_objects[name] = webhook
-                    print(f"Initialized webhook '{name}': {webhook.url}")
-                except Exception as e:
-                    print(f"Error initializing webhook '{name}': {e}")
+            try:
+                webhook_id, webhook_token = parse_webhook_url(url)
+                webhook = await self.bot.fetch_webhook(webhook_id)
+                guild_id = webhook.guild_id
+                if guild_id not in self.webhook_objects:
+                    self.webhook_objects[guild_id] = {}
+                self.webhook_objects[guild_id][name] = webhook
+                print(f"Initialized webhook '{name}' in guild {guild_id}: {webhook.url}")
+            except Exception as e:
+                print(f"Error initializing webhook '{name}': {e}")
 
-    async def get_webhook(self, name):
+    async def get_webhook(self, guild_id, name):
         """
-        Retrieves a webhook by name.
+        Retrieves a webhook by guild ID and name.
 
         Args:
+            guild_id (int): The ID of the guild.
             name (str): The name of the webhook.
 
         Returns:
             discord.Webhook: The webhook object.
         """
         async with self.lock:
-            return self.webhook_objects.get(name)
+            return self.webhook_objects.get(guild_id, {}).get(name)
 
     async def create_webhook(self, name, channel_id):
         """
