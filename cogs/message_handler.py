@@ -37,8 +37,8 @@ class MessageHandler(commands.Cog):
         temperature: float = None
     ):
         """Slash command version of obliqueme"""
-        # Defer the response since this will take some time
-        await interaction.response.defer()
+        # Defer the response as ephemeral and delete it later
+        await interaction.response.defer(ephemeral=True)
         
         try:
             # Get webhooks for this guild
@@ -101,6 +101,9 @@ class MessageHandler(commands.Cog):
             # Get or create agent and process request
             agent = await self.get_or_create_agent(interaction.user.id)
             await agent.enqueue_message(data)
+            
+            # Delete the deferred response
+            await interaction.delete_original_response()
 
         except Exception as e:
             print(f"Error handling slash command: {e}")
