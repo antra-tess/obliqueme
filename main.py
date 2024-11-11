@@ -15,7 +15,7 @@ def main():
     intents = discord.Intents.default()
     intents.message_content = True  # Ensure the bot can read message content
 
-    bot = commands.Bot(command_prefix='!', intents=intents)
+    bot = commands.Bot(command_prefix='!', intents=intents, command_tree_cls=discord.app_commands.CommandTree)
 
     # Attach configuration to bot for access in Cogs
     bot.config = Config

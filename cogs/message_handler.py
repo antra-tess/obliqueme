@@ -19,6 +19,40 @@ class MessageHandler(commands.Cog):
         self.agents_lock = asyncio.Lock()
         self.message_history = {}  # This will now store history per message
         self.message_current_index = {}  # This will store the current index for each message
+        
+    @discord.app_commands.command(
+        name="oblique",
+        description="Generate a base model simulation of the conversation"
+    )
+    @discord.app_commands.describe(
+        suppress_name="Don't add your name at the end of the prompt",
+        custom_name="Use a custom name instead of your display name",
+        temperature="Set the temperature for generation (0.1-1.0)"
+    )
+    async def oblique_command(
+        self, 
+        interaction: discord.Interaction, 
+        suppress_name: bool = False,
+        custom_name: str = None,
+        temperature: float = None
+    ):
+        """Slash command version of obliqueme"""
+        # Defer the response since this will take some time
+        await interaction.response.defer(ephemeral=True)
+        
+        # Create a fake message object with the necessary attributes
+        fake_message = type('FakeMessage', (), {
+            'author': interaction.user,
+            'channel': interaction.channel,
+            'guild': interaction.guild,
+            'delete': lambda: None  # No need to delete for slash command
+        })
+        
+        # Handle the command like a keyword
+        await self.handle_keyword(fake_message, suppress_name, custom_name, temperature)
+        
+        # Send a completion message
+        await interaction.followup.send("Generation started!", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_ready(self):
