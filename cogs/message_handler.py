@@ -252,6 +252,7 @@ class MessageHandler(commands.Cog):
                             name=webhook_name,
                             message_id=generating_message_id,
                             new_content=content_with_page,
+                            guild_id=data['message'].guild.id,
                             view=view
                         )
                         print(
