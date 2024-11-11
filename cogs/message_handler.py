@@ -472,18 +472,20 @@ class MessageHandler(commands.Cog):
                     if custom_id == "reroll":
                         print(f"Reroll button clicked by {interaction.user.display_name}")
 
-                        # Retrieve the original options
-                        original_options = self.message_history.get(original_message.id, {}).get('options', {})
+                        # Get the generation context
+                        context = await self.generation_manager.get_context(original_message.id)
+                        if not context:
+                            print(f"No context found for message {original_message.id}")
+                            return
 
                         # Prepare data for the LLM agent
                         data = {
                             'message': original_message,
                             'generating_message_id': original_message.id,
                             'channel_id': interaction.channel_id,
-                            'username': original_options.get('custom_name') or interaction.user.display_name,
-                            'webhook': next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),  # Get the first webhook name
-                            'suppress_name': original_options.get('suppress_name', False),
-                            'custom_name': original_options.get('custom_name')
+                            'username': context.parameters.get('custom_name') or interaction.user.display_name,
+                            'webhook': next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                            'context': context  # Pass the entire context
                         }
 
                         # Edit the message to show "Regenerating..."
@@ -504,23 +506,20 @@ class MessageHandler(commands.Cog):
                     elif custom_id in ["prev", "next", "trim"]:
                         print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
 
-                        if original_message.id in self.message_history:
-                            history = self.message_history[original_message.id]['messages']
-                            current_index = self.message_current_index.get(original_message.id, len(history) - 1)
+                        context = await self.generation_manager.get_context(original_message.id)
+                        if not context:
+                            print(f"No context found for message {original_message.id}")
+                            return
 
-                            if custom_id == "trim":
-                                new_content = self.trim_message(history[current_index])
-                                history[current_index] = new_content
-                            else:
-                                new_index = current_index - 1 if custom_id == "prev" else current_index + 1
-                                if 0 <= new_index < len(history):
-                                    new_content = history[new_index]
-                                    self.message_current_index[original_message.id] = new_index
-                                    current_index = new_index
-                                else:
-                                    print(
-                                        f"Cannot go {custom_id} from the current message. Current index: {current_index}, New index: {new_index}, History length: {len(history)}")
-                                    return
+                        if custom_id == "trim":
+                            new_content = self.trim_message(context.current_content)
+                            await context.add_generation(new_content)  # Add trimmed version as new generation
+                        else:
+                            new_index = context.current_index - 1 if custom_id == "prev" else context.current_index + 1
+                            new_content = await context.navigate(new_index)
+                            if new_content is None:
+                                print(f"Cannot navigate to index {new_index}")
+                                return
 
                             # Update the message content and button states
                             view = View()
