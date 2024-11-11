@@ -6,6 +6,7 @@ load_dotenv()
 
 class Config:
     BOT_TOKEN = os.getenv('BOT_TOKEN')
+    APPLICATION_ID = os.getenv('APPLICATION_ID')
     WEBHOOK_URLS = {
         # Add more webhooks as needed
         # 'alerts': os.getenv('WEBHOOK_ALERTS'),
