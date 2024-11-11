@@ -46,14 +46,8 @@ class MessageHandler(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            # Get webhooks for this guild
-            guild_webhooks = self.webhook_manager.webhook_objects.get(interaction.guild_id, {})
-            if not guild_webhooks:
-                webhook = await self.webhook_manager.create_webhook('oblique_main', interaction.channel_id)
-                webhook_name = 'oblique_main'
-            else:
-                webhook_name = random.choice(list(guild_webhooks.keys()))
-                webhook = await self.webhook_manager.move_webhook(interaction.guild_id, webhook_name, interaction.channel)
+            # Get next webhook from the pool
+            webhook_name, webhook = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
 
             if not webhook:
                 await interaction.followup.send("Failed to set up webhook.", ephemeral=True)
@@ -296,16 +290,8 @@ class MessageHandler(commands.Cog):
             #     print(f"Channel with ID {message.channel_id} not found.")
             #     return
 
-            # Get webhooks for this guild
-            guild_webhooks = self.webhook_manager.webhook_objects.get(message.guild.id, {})
-            if not guild_webhooks:
-                # Create initial webhook for this guild if none exist
-                webhook = await self.webhook_manager.create_webhook('oblique_main', message.channel.id)
-                webhook_name = 'oblique_main'
-            else:
-                # Select random webhook from this guild's webhooks
-                webhook_name = random.choice(list(guild_webhooks.keys()))
-                webhook = await self.webhook_manager.move_webhook(message.guild.id, webhook_name, message.channel)
+            # Get next webhook from the pool
+            webhook_name, webhook = await self.webhook_manager.get_next_webhook(message.guild.id, message.channel.id)
 
             if not webhook:
                 print("Failed to move webhook for the replacement.")

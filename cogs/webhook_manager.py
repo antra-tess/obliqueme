@@ -39,6 +39,12 @@ class WebhookManager(commands.Cog):
                 if existing_webhook:
                     self.webhook_objects[guild.id][webhook_name] = existing_webhook
                     print(f"Found existing webhook '{webhook_name}' in guild {guild.id}: {existing_webhook.url}")
+                else:
+                    # Create new webhook if it doesn't exist
+                    default_channel = guild.text_channels[0]  # Get first text channel as default
+                    new_webhook = await self.create_webhook(webhook_name, default_channel.id)
+                    if new_webhook:
+                        print(f"Created new webhook '{webhook_name}' in guild {guild.id}")
 
         # Initialize any remaining webhooks from the webhook_urls configuration
         for name, url in self.webhook_urls.items():
