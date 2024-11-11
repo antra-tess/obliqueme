@@ -332,17 +332,24 @@ class MessageHandler(commands.Cog):
                         self.message_current_index[generating_message_id] = len(
                             self.message_history[generating_message_id]['messages']) - 1
 
-                        # Update button states
+                        # Create full button set after generation completes
                         history = self.message_history[generating_message_id]['messages']
                         current_index = self.message_current_index[generating_message_id]
-                        view = View()
-                        view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
-                                             disabled=(current_index == 0)))
-                        view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
-                        view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
-                                             disabled=(current_index == len(history) - 1)))
-                        view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
-                        view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+                        
+                        # Only show full button set if this isn't the first generation
+                        if len(history) > 0:
+                            view = View()
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
+                                               disabled=(current_index == 0)))
+                            view.add_item(Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll"))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
+                                               disabled=(current_index == len(history) - 1)))
+                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+                        else:
+                            # Keep the cancel button for the first generation
+                            view = View()
+                            view.add_item(Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel"))
 
                         # Add page information to the content
                         content_with_page = f"{replacement_text}"
