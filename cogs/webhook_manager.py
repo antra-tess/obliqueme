@@ -80,8 +80,9 @@ class WebhookManager(commands.Cog):
             else:
                 print(f"Found existing webhook {webhook_name}")
                 webhook = self.webhook_objects[guild_id][webhook_name]
-                print(f"Moving webhook to channel {channel_id}")
+                print(f"Moving webhook to channel before {channel_id}")
                 webhook = await self.move_webhook(guild_id, webhook_name, self.bot.get_channel(channel_id))
+                print("Moved webhook")
             
             print(f"Returning webhook {webhook_name}: {webhook}")
             return webhook_name, webhook
