@@ -39,7 +39,11 @@ class LLMAgent:
 
             formatted_messages = await self.format_messages(message, bot)
             custom_name = data.get('custom_name')
-            name = (custom_name or message.author.display_name).replace("[oblique]", "")
+            # Handle both Message and Interaction objects
+            if isinstance(message, discord.Interaction):
+                name = (custom_name or message.user.display_name).replace("[oblique]", "")
+            else:
+                name = (custom_name or message.author.display_name).replace("[oblique]", "")
 
             prompt = formatted_messages
             if not data.get('suppress_name', False):
