@@ -25,13 +25,15 @@ class MessageHandler(commands.Cog):
         description="Generate a base model simulation of the conversation"
     )
     @discord.app_commands.describe(
+        seed="Starting text for the simulation (optional)",
         suppress_name="Don't add your name at the end of the prompt",
         custom_name="Use a custom name instead of your display name",
         temperature="Set the temperature for generation (0.1-1.0)"
     )
     async def oblique_command(
         self, 
-        interaction: discord.Interaction, 
+        interaction: discord.Interaction,
+        seed: str = None,
         suppress_name: bool = False,
         custom_name: str = None,
         temperature: float = None
@@ -155,33 +157,57 @@ class MessageHandler(commands.Cog):
             print(
                 f'Keyword "{self.config.KEYWORD}" detected in channel {message.channel.name} (ID: {message.channel.id}).')
 
-            # Check for options
-            options = message.content.split()[1:]  # Get all words after the keyword
-            suppress_name = "-s" in options
+            # Split content into words
+            words = message.content.split()
+            options = []
+            seed_words = []
+            
+            # Process each word after the keyword
+            for word in words[1:]:
+                if word.startswith('-'):
+                    options.append(word)
+                else:
+                    # If we're after a parameter that takes a value, it's not part of the seed
+                    if options and options[-1] in ['-n', '-p']:
+                        options.append(word)
+                    else:
+                        seed_words.append(word)
 
-            # Check for -n option and extract the name
+            # Extract options
+            suppress_name = "-s" in options
+            
+            # Extract custom name
             custom_name = None
             if "-n" in options:
                 name_index = options.index("-n") + 1
                 if name_index < len(options):
                     custom_name = options[name_index]
+                    # Remove the name from seed if it was captured there
+                    if custom_name in seed_words:
+                        seed_words.remove(custom_name)
 
-            # Check for -p option and extract the temperature
+            # Extract temperature
             temperature = None
             if "-p" in options:
                 p_index = options.index("-p") + 1
                 if p_index < len(options):
                     try:
-                        temperature = float(options[p_index])
+                        temp_value = options[p_index]
+                        temperature = float(temp_value)
+                        # Remove the temperature from seed if it was captured there
+                        if temp_value in seed_words:
+                            seed_words.remove(temp_value)
                     except ValueError:
                         print(f"Invalid temperature value: {options[p_index]}")
-                        temperature = None  # Default or handle error as needed
 
-            await self.handle_keyword(message, suppress_name, custom_name, temperature)
+            # Join remaining words as seed
+            seed = " ".join(seed_words) if seed_words else None
+
+            await self.handle_keyword(message, suppress_name, custom_name, temperature, seed)
 
         await self.bot.process_commands(message)
 
-    async def handle_keyword(self, message, suppress_name=False, custom_name=None, temperature=None):
+    async def handle_keyword(self, message, suppress_name=False, custom_name=None, temperature=None, seed=None):
         """
         Handles the keyword detection by deleting the user's message,
         replacing it with 'Generating...', and interacting with the LLM agent.
