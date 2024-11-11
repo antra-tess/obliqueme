@@ -26,8 +26,11 @@ class LLMAgent:
 
     async def process_queue(self):
         while True:
+            print("\nWaiting for queue item...")
             data = await self.queue.get()
+            print(f"Processing queue item for user {data.get('username')}")
             await self.handle_message(data)
+            print("Queue item processed")
             self.queue.task_done()
 
     async def handle_message(self, data):

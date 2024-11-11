@@ -42,8 +42,10 @@ class MessageHandler(commands.Cog):
         temperature: float = None
     ):
         """Slash command version of obliqueme"""
+        print(f"\nSlash command received from {interaction.user.display_name} in {interaction.guild.name}")
         # Defer the response as ephemeral and delete it later
         await interaction.response.defer(ephemeral=True)
+        print("Response deferred")
         
         try:
             # Get next webhook from the pool

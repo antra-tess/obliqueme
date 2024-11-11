@@ -61,6 +61,7 @@ class WebhookManager(commands.Cog):
 
     async def get_next_webhook(self, guild_id, channel_id):
         """Get the next available webhook in the pool and move it to the target channel."""
+        print(f"\nGetting next webhook for guild {guild_id}, channel {channel_id}")
         async with self.lock:
             if guild_id not in self.current_index:
                 self.current_index[guild_id] = 0
