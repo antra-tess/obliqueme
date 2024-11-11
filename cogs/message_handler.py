@@ -19,6 +19,101 @@ class MessageHandler(commands.Cog):
         self.agents_lock = asyncio.Lock()
         self.message_history = {}  # This will now store history per message
         self.message_current_index = {}  # This will store the current index for each message
+
+    @discord.app_commands.command(
+        name="oblique",
+        description="Generate a base model simulation of the conversation"
+    )
+    @discord.app_commands.describe(
+        suppress_name="Don't add your name at the end of the prompt",
+        custom_name="Use a custom name instead of your display name",
+        temperature="Set the temperature for generation (0.1-1.0)"
+    )
+    async def oblique_command(
+        self, 
+        interaction: discord.Interaction, 
+        suppress_name: bool = False,
+        custom_name: str = None,
+        temperature: float = None
+    ):
+        """Slash command version of obliqueme"""
+        # Defer the response since this will take some time
+        await interaction.response.defer()
+        
+        try:
+            # Get webhooks for this guild
+            guild_webhooks = self.webhook_manager.webhook_objects.get(interaction.guild_id, {})
+            if not guild_webhooks:
+                webhook = await self.webhook_manager.create_webhook('oblique_main', interaction.channel_id)
+                webhook_name = 'oblique_main'
+            else:
+                webhook_name = random.choice(list(guild_webhooks.keys()))
+                webhook = await self.webhook_manager.move_webhook(interaction.guild_id, webhook_name, interaction.channel)
+
+            if not webhook:
+                await interaction.followup.send("Failed to set up webhook.", ephemeral=True)
+                return
+
+            # Create view with buttons
+            view = View()
+            reroll_button = Button(style=ButtonStyle.primary, label="Reroll", custom_id="reroll")
+            prev_button = Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev", disabled=True)
+            next_button = Button(style=ButtonStyle.secondary, label="Next", custom_id="next", disabled=True)
+            view.add_item(prev_button)
+            view.add_item(reroll_button)
+            view.add_item(next_button)
+
+            # Send initial message
+            generating_content = "Oblique: Generating..."
+            reversed_username = interaction.user.display_name + "[oblique]"
+            sent_message = await self.webhook_manager.send_via_webhook(
+                name=webhook_name,
+                content=generating_content,
+                username=reversed_username,
+                avatar_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None,
+                guild_id=interaction.guild_id,
+                view=view
+            )
+
+            if not sent_message:
+                await interaction.followup.send("Failed to send initial message.", ephemeral=True)
+                return
+
+            # Initialize message history
+            self.message_history[sent_message.id] = {
+                'messages': deque(maxlen=10),
+                'options': {
+                    'suppress_name': suppress_name,
+                    'custom_name': custom_name
+                }
+            }
+
+            # Prepare data for LLM agent
+            data = {
+                'message': interaction,  # Pass interaction instead of message
+                'generating_message_id': sent_message.id,
+                'channel_id': interaction.channel_id,
+                'username': custom_name or interaction.user.display_name,
+                'webhook': webhook_name,
+                'bot': self.bot,
+                'user_id': interaction.user.id,
+                'suppress_name': suppress_name,
+                'custom_name': custom_name,
+                'temperature': temperature
+            }
+
+            # Get or create agent and process request
+            agent = await self.get_or_create_agent(interaction.user.id)
+            await agent.enqueue_message(data)
+
+            # Send a completion message
+            await interaction.followup.send("Generation started!", ephemeral=True)
+
+        except Exception as e:
+            print(f"Error handling slash command: {e}")
+            import traceback
+            traceback.print_exc()
+            await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
         
     @discord.app_commands.command(
         name="oblique",
@@ -177,7 +272,13 @@ class MessageHandler(commands.Cog):
             )
 
             # Initialize message history for this message
-            self.message_history[sent_message.id] = deque(maxlen=10)  # Store up to 10 generations per message
+            self.message_history[sent_message.id] = {
+                'messages': deque(maxlen=10),
+                'options': {
+                    'suppress_name': suppress_name,
+                    'custom_name': custom_name
+                }
+            }
             if not sent_message:
                 print("Failed to send 'Generating...' message via webhook.")
                 return
