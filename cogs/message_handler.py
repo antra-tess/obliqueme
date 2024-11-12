@@ -468,13 +468,13 @@ class MessageHandler(commands.Cog):
                         # Edit the message with the LLM-generated replacement and updated view
                         await self.webhook_manager.edit_via_webhook(
                             name=webhook_name,
-                            message_id=generating_message_id,
+                            message_id=data['generating_message_id'],
                             new_content=content_with_page,
                             guild_id=data['message'].guild.id,
                             view=view
                         )
                         print(
-                            f"Sent LLM-generated replacement (page {page}/{total_pages}) with updated view for user '{username}'.")
+                            f"Sent LLM-generated replacement (page {page}/{total_pages}) with updated view for user '{data['username']}'.")
                     except Exception as e:
                         print(f"Error sending LLM-generated replacement: {e}")
                         import traceback
