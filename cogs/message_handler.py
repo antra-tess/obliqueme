@@ -111,7 +111,8 @@ class MessageHandler(commands.Cog):
                 custom_name=custom_name,
                 temperature=temperature,
                 avatar_url=avatar_url,
-                target_member_id=target_member_id
+                target_member_id=target_member_id,
+                webhook_name=webhook_name  # Store the webhook name
             )
             await self.generation_manager.register_message(context, sent_message.id)
 
@@ -499,10 +500,18 @@ class MessageHandler(commands.Cog):
                         print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
                         
                         if custom_id == "commit":
-                            # Use the original webhook that sent the message
-                            webhook_name = original_message.webhook.name
+                            # Get webhook name from context
+                            context = await self.generation_manager.get_context(original_message.id)
+                            if not context:
+                                print(f"No context found for message {original_message.id}")
+                                return
+                                
+                            webhook_name = context.parameters.get('webhook_name')
+                            if not webhook_name:
+                                print(f"No webhook name found in context for message {original_message.id}")
+                                return
+                                
                             print(f"Committing message using original webhook: {webhook_name}")
-                            
                             await self.webhook_manager.edit_via_webhook(
                                 name=webhook_name,
                                 message_id=original_message.id,
@@ -625,8 +634,19 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
 
+                            # Get webhook name from context
+                            context = await self.generation_manager.get_context(original_message.id)
+                            if not context:
+                                print(f"No context found for message {original_message.id}")
+                                return
+                                
+                            webhook_name = context.parameters.get('webhook_name')
+                            if not webhook_name:
+                                print(f"No webhook name found in context for message {original_message.id}")
+                                return
+                                
                             await self.webhook_manager.edit_via_webhook(
-                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                name=webhook_name,
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,

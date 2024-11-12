@@ -12,7 +12,8 @@ class GenerationContext:
             'suppress_name': parameters.get('suppress_name', False),
             'custom_name': parameters.get('custom_name'),
             'temperature': parameters.get('temperature'),
-            'avatar_url': parameters.get('avatar_url')
+            'avatar_url': parameters.get('avatar_url'),
+            'webhook_name': parameters.get('webhook_name')  # Store the webhook name
         }
         self.history = deque(maxlen=10)
         self.current_index = 0
