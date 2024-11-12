@@ -499,8 +499,10 @@ class MessageHandler(commands.Cog):
                         print(f"{custom_id.capitalize()} button clicked by {interaction.user.display_name}")
                         
                         if custom_id == "commit":
-                            # Remove all buttons and keep the content
-                            webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
+                            # Use the original webhook that sent the message
+                            webhook_name = original_message.webhook.name
+                            print(f"Committing message using original webhook: {webhook_name}")
+                            
                             await self.webhook_manager.edit_via_webhook(
                                 name=webhook_name,
                                 message_id=original_message.id,
