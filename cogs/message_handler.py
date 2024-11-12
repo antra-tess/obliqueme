@@ -550,8 +550,11 @@ class MessageHandler(commands.Cog):
                             if target_member := interaction.guild.get_member(target_member_id):
                                 avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
 
-                        # Get next webhook
-                        webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
+                        # Get webhook name from context
+                        webhook_name = context.parameters.get('webhook_name')
+                        if not webhook_name:
+                            print(f"No webhook name found in context for message {original_message.id}")
+                            return
 
                         # Prepare data for the LLM agent
                         data = {
@@ -569,9 +572,9 @@ class MessageHandler(commands.Cog):
                             'avatar_url': avatar_url
                         }
 
-                        # Edit the message to show "Regenerating..."
+                        # Edit the message to show "Regenerating..." using original webhook
                         await self.webhook_manager.edit_via_webhook(
-                            name=webhook_name,
+                            name=context.parameters.get('webhook_name'),  # Use original webhook
                             message_id=original_message.id,
                             new_content="Regenerating...",
                             guild_id=interaction.guild_id
@@ -607,9 +610,14 @@ class MessageHandler(commands.Cog):
                             view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
                             view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
 
-                            webhook_name, _ = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
+                            # Get webhook name from context
+                            webhook_name = context.parameters.get('webhook_name')
+                            if not webhook_name:
+                                print(f"No webhook name found in context for message {original_message.id}")
+                                return
+                                
                             await self.webhook_manager.edit_via_webhook(
-                                name=webhook_name,
+                                name=webhook_name,  # Use original webhook
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,
