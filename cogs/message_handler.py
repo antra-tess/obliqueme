@@ -177,6 +177,33 @@ class MessageHandler(commands.Cog):
         print("No matching member found")
         return None
 
+    async def get_webhook_from_context(self, message_id: int, user_name: str) -> tuple[Optional[str], Optional[GenerationContext]]:
+        """Get webhook name and context for a message, with error handling."""
+        context = await self.generation_manager.get_context(message_id)
+        if not context:
+            print(f"No context found for message {message_id}")
+            return None, None
+            
+        webhook_name = context.parameters.get('webhook_name')
+        if not webhook_name:
+            print(f"No webhook name found in context for message {message_id}")
+            return None, None
+            
+        return webhook_name, context
+
+    def create_generation_view(self, context: GenerationContext) -> View:
+        """Create a view with all generation buttons."""
+        view = View()
+        view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
+                           disabled=(context.current_index == 0)))
+        view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
+        view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
+                           disabled=(context.current_index == len(context.history) - 1)))
+        view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
+        view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
+        view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+        return view
+
     def trim_message(self, content):
         lines = content.split('\n')
         if not lines:
