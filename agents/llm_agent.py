@@ -124,14 +124,18 @@ class LLMAgent:
                                              before=message if isinstance(message, discord.Message) else None):
                 # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
+                # Get clean username without any oblique tags
                 username = msg.author.display_name
-                # Strip both [oblique] and [oblique:name] tags
                 if "[oblique:" in username:
-                    # Extract just the display name part before [oblique:requester]
-                    username = username.split("[oblique:")[0]
+                    username = username.split("[oblique:")[0].strip()
                 else:
-                    username = username.replace("[oblique]", "")
+                    username = username.replace("[oblique]", "").strip()
+
+                # Clean up content if it contains oblique tags
                 content = msg.content
+                if "[oblique:" in content:
+                    content = content.split("[oblique:")[0].strip()
+                content = content.replace("[oblique]", "").strip()
 
                 #                print("content", "[" + content + "]")
                 if content == "oblique_clear":
