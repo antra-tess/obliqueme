@@ -523,9 +523,20 @@ class MessageHandler(commands.Cog):
                             await self.generation_manager.remove_context(original_message.id)
                             print(f"Committed message for {interaction.user.display_name}")
                         else:
+                            # Get webhook name from context
+                            context = await self.generation_manager.get_context(original_message.id)
+                            if not context:
+                                print(f"No context found for message {original_message.id}")
+                                return
+                                
+                            webhook_name = context.parameters.get('webhook_name')
+                            if not webhook_name:
+                                print(f"No webhook name found in context for message {original_message.id}")
+                                return
+
                             # Handle delete and cancel
                             await self.webhook_manager.delete_webhook_message(
-                                name=next(iter(self.webhook_manager.webhook_objects.get(interaction.guild_id, {}))),
+                                name=webhook_name,  # Use original webhook
                                 message_id=original_message.id,
                                 guild_id=interaction.guild_id
                             )
