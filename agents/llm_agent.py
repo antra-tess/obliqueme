@@ -152,9 +152,6 @@ class LLMAgent:
                 if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
 
-                # Preserve newlines
-                clean_content = clean_content.replace('\n', '\\n')  # Escape newlines
-
                 formatted.append(f'<{username}> {clean_content}\n')
         except Exception as e:
             print(f"Error formatting messages: {e}")
@@ -279,9 +276,6 @@ class LLMAgent:
 
         # Strip the termination tag if present
         processed_text = processed_text.replace(termination_tag, "")
-
-        # Unescape any escaped newlines
-        processed_text = processed_text.replace('\\n', '\n')
 
         # Handle different modes
         if data and data.get('mode') == 'self':
