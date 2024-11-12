@@ -637,22 +637,8 @@ class MessageHandler(commands.Cog):
                             new_content = self.trim_message(context.current_content)
                             await context.add_generation(new_content)  # Add trimmed version as new generation
                             
-                            # Update the message with trimmed content and buttons
-                            view = View()
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
-                                               disabled=(context.current_index == 0)))
-                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
-                                               disabled=(context.current_index == len(context.history) - 1)))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
-                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
-                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
-
-                            # Get webhook name from context
-                            webhook_name = context.parameters.get('webhook_name')
-                            if not webhook_name:
-                                print(f"No webhook name found in context for message {original_message.id}")
-                                return
+                            # Create view with updated button states
+                            view = self.create_generation_view(context)
                                 
                             await self.webhook_manager.edit_via_webhook(
                                 name=webhook_name,  # Use original webhook
@@ -669,27 +655,13 @@ class MessageHandler(commands.Cog):
                                 print(f"Cannot navigate to index {new_index}")
                                 return
 
-                            # Update the message content and button states
-                            view = View()
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
-                                                 disabled=(context.current_index == 0)))
-                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
-                                                 disabled=(context.current_index == len(context.history) - 1)))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
-                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
-                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
+                            # Get webhook name and context
+                            webhook_name, context = await self.get_webhook_from_context(original_message.id, interaction.user.display_name)
+                            if not webhook_name or not context:
+                                return
 
-                            # Get webhook name from context
-                            context = await self.generation_manager.get_context(original_message.id)
-                            if not context:
-                                print(f"No context found for message {original_message.id}")
-                                return
-                                
-                            webhook_name = context.parameters.get('webhook_name')
-                            if not webhook_name:
-                                print(f"No webhook name found in context for message {original_message.id}")
-                                return
+                            # Create view with updated button states
+                            view = self.create_generation_view(context)
                                 
                             await self.webhook_manager.edit_via_webhook(
                                 name=webhook_name,
