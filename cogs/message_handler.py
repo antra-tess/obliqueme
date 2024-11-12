@@ -465,21 +465,8 @@ class MessageHandler(commands.Cog):
                         # Add the new generation to context
                         await context.add_generation(replacement_text)
                         
-                        # Only show full button set if this isn't the first generation
-                        if len(context.history) > 0:
-                            view = View()
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Prev", custom_id="prev",
-                                               disabled=(context.current_index == 0)))
-                            view.add_item(Button(style=ButtonStyle.primary, label="+3", custom_id="reroll"))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Next", custom_id="next",
-                                               disabled=(context.current_index == len(context.history) - 1)))
-                            view.add_item(Button(style=ButtonStyle.secondary, label="Trim", custom_id="trim"))
-                            view.add_item(Button(style=ButtonStyle.success, label="Commit", custom_id="commit"))
-                            view.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="delete"))
-                        else:
-                            # Keep the cancel button for the first generation
-                            view = View()
-                            view.add_item(Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel"))
+                        # Use appropriate view based on generation state
+                        view = self.create_generation_view(context) if len(context.history) > 0 else self.create_cancel_view()
 
                         # Add page information to the content
                         content_with_page = f"{replacement_text}"
