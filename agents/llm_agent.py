@@ -127,7 +127,8 @@ class LLMAgent:
                 username = msg.author.display_name
                 # Strip both [oblique] and [oblique:name] tags
                 if "[oblique:" in username:
-                    username = username[:username.find("[oblique:")]
+                    # Extract just the display name part before [oblique:requester]
+                    username = username.split("[oblique:")[0]
                 else:
                     username = username.replace("[oblique]", "")
                 content = msg.content
