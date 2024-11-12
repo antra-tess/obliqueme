@@ -65,10 +65,24 @@ class LLMAgent:
             completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
             completions = await asyncio.gather(*completion_tasks)
 
-            # Process each completion and send it to the callback
-            for i, response_text in enumerate(completions):
+            # Filter out empty completions and process valid ones
+            valid_completions = []
+            for response_text in completions:
                 replacement_text = self.process_response(response_text, data)
-                await self.callback(data, replacement_text, page=i + 1, total_pages=3)
+                if replacement_text and replacement_text != "Error: No response from LLM.":
+                    valid_completions.append(replacement_text)
+
+            # Handle case when all completions are empty
+            if not valid_completions:
+                replacement_text = "No valid response generated. Please try again."
+                await self.callback(data, replacement_text, page=1, total_pages=1)
+                print(f"LLMAgent '{self.name}' generated no valid completions.")
+                return
+
+            # Send valid completions to callback with correct page numbers
+            total_pages = len(valid_completions)
+            for i, replacement_text in enumerate(valid_completions):
+                await self.callback(data, replacement_text, page=i + 1, total_pages=total_pages)
 
             # Handle both Message and Interaction objects
             if isinstance(message, discord.Interaction):
@@ -82,10 +96,10 @@ class LLMAgent:
 
             self.message_history[user_id].append({
                 'id': data['generating_message_id'],
-                'content': [self.process_response(text) for text in completions]
+                'content': valid_completions
             })
 
-            print(f"LLMAgent '{self.name}' generated 3 replacement texts.")
+            print(f"LLMAgent '{self.name}' generated {total_pages} valid replacement texts.")
 
         except Exception as e:
             print(f"Error in LLMAgent '{self.name}': {e}")
