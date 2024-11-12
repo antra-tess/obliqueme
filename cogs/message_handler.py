@@ -55,10 +55,8 @@ class MessageHandler(commands.Cog):
                 await interaction.followup.send("Failed to set up webhook.", ephemeral=True)
                 return
 
-            # Create a View with just the Cancel button for generation state
-            view = View()
-            cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
-            view.add_item(cancel_button)
+            # Create a View with just the Cancel button
+            view = self.create_cancel_view()
 
             # Initialize variables
             target_member_id = None
@@ -190,6 +188,12 @@ class MessageHandler(commands.Cog):
             return None, None
             
         return webhook_name, context
+
+    def create_cancel_view(self) -> View:
+        """Create a view with just the cancel button."""
+        view = View()
+        view.add_item(Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel"))
+        return view
 
     def create_generation_view(self, context: GenerationContext) -> View:
         """Create a view with all generation buttons."""
@@ -332,10 +336,8 @@ class MessageHandler(commands.Cog):
                 print("Failed to move webhook for the replacement.")
                 return
 
-            # Create a View with just the Cancel button for generation state
-            view = View()
-            cancel_button = Button(style=ButtonStyle.danger, label="Cancel", custom_id="cancel")
-            view.add_item(cancel_button)
+            # Create a View with just the Cancel button
+            view = self.create_cancel_view()
 
             # Handle custom name and avatar
             if custom_name:
