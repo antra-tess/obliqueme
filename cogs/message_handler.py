@@ -439,11 +439,11 @@ class MessageHandler(commands.Cog):
                         total_pages (int): The total number of pages.
                     """
                     try:
-                        # Extract necessary information
-                        generating_message_id = data['generating_message_id']
-                        webhook_name = data['webhook']
-                        channel_id = data['channel_id']
-                        username = data['username']
+                        # Get webhook name and context
+                        webhook_name, context = await self.get_webhook_from_context(data['generating_message_id'], data['username'])
+                        if not webhook_name or not context:
+                            return
+
                         # Handle both Message and Interaction objects
                         if isinstance(data['message'], discord.Interaction):
                             user_id = data['message'].user.id
@@ -451,15 +451,9 @@ class MessageHandler(commands.Cog):
                             user_id = data['message'].author.id
 
                         # Get the channel object
-                        channel = self.bot.get_channel(channel_id)
+                        channel = self.bot.get_channel(data['channel_id'])
                         if not channel:
-                            print(f"Channel with ID {channel_id} not found.")
-                            return
-
-                        # Get or create context
-                        context = await self.generation_manager.get_context(generating_message_id)
-                        if not context:
-                            print(f"No context found for message {generating_message_id}")
+                            print(f"Channel with ID {data['channel_id']} not found.")
                             return
 
                         # Add the new generation to context
@@ -629,8 +623,13 @@ class MessageHandler(commands.Cog):
                             # Create view with updated button states
                             view = self.create_generation_view(context)
                                 
+                            # Get webhook name from context
+                            webhook_name, _ = await self.get_webhook_from_context(original_message.id, interaction.user.display_name)
+                            if not webhook_name:
+                                return
+                                
                             await self.webhook_manager.edit_via_webhook(
-                                name=webhook_name,  # Use original webhook
+                                name=webhook_name,
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,
