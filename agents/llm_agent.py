@@ -140,6 +140,7 @@ class LLMAgent:
                 # Convert mentions to readable format
                 for mention in msg.mentions:
                     content = content.replace(f'<@{mention.id}>', f'@{mention.display_name}')
+                    content = content.replace(f'<@!{mention.id}>', f'@{mention.display_name}')  # Handle mentions with !
                 for role_mention in msg.role_mentions:
                     content = content.replace(f'<@&{role_mention.id}>', f'@{role_mention.name}')
                 if msg.mention_everyone:
