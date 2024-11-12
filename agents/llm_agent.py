@@ -137,7 +137,15 @@ class LLMAgent:
                     content = content.split("[oblique:")[0].strip()
                 content = content.replace("[oblique]", "").strip()
 
-                #                print("content", "[" + content + "]")
+                # Convert mentions to readable format
+                for mention in msg.mentions:
+                    content = content.replace(f'<@{mention.id}>', f'@{mention.display_name}')
+                for role_mention in msg.role_mentions:
+                    content = content.replace(f'<@&{role_mention.id}>', f'@{role_mention.name}')
+                if msg.mention_everyone:
+                    content = content.replace('@everyone', '@everyone')
+                    content = content.replace('@here', '@here')
+
                 if content == "oblique_clear":
                     print("clearing")
                     break
