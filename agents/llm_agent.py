@@ -125,7 +125,11 @@ class LLMAgent:
                 # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
                 username = msg.author.display_name
-                username = username.replace("[oblique]", "")
+                # Strip both [oblique] and [oblique:name] tags
+                if "[oblique:" in username:
+                    username = username[:username.find("[oblique:")]
+                else:
+                    username = username.replace("[oblique]", "")
                 content = msg.content
 
                 #                print("content", "[" + content + "]")
