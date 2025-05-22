@@ -46,6 +46,10 @@ OPENROUTER_API_KEY=your_api_key_here
 MODEL_TYPE=base  # or 'instruct'
 MODEL_NAME=meta-llama/Meta-Llama-3.1-405B
 
+# Optional: Model quantization (e.g., 'bf16' for some models)
+# Leave empty if not supported by your model
+MODEL_QUANTIZATION=
+
 # For instruct models only
 INSTRUCT_SYSTEM_PROMPT=The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands.
 INSTRUCT_USER_PREFIX=<cmd>cat untitled.log</cmd>
@@ -70,7 +74,7 @@ Use `/oblique` for the same functionality with a cleaner interface.
 
 ## How It Works
 
-1. **Message Collection**: The bot reads the last 80 messages from the channel
+1. **Message Collection**: The bot reads the last 200 messages from the channel
 2. **Formatting**: Messages are formatted according to the model type:
    - Base models: `<username> message content`
    - Instruct models: `username: message content`

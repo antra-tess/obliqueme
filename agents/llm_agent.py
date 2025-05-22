@@ -76,8 +76,10 @@ class LLMAgent:
             # Filter out empty completions and process valid ones
             valid_completions = []
             for response_text in completions:
+                print(f"Response text: {response_text}")
                 replacement_text = self.process_response(response_text, data)
                 if replacement_text and replacement_text != "Error: No response from LLM.":
+                    print("is valid")
                     valid_completions.append(replacement_text)
 
             # Handle case when all completions are empty
