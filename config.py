@@ -23,6 +23,9 @@ class Config:
     MODEL_TYPE = os.getenv('MODEL_TYPE', 'base')  # 'base' or 'instruct'
     MODEL_NAME = os.getenv('MODEL_NAME', 'meta-llama/Meta-Llama-3.1-405B')
     
+    # Optional provider settings
+    MODEL_QUANTIZATION = os.getenv('MODEL_QUANTIZATION', '')  # e.g., 'bf16' - leave empty for no quantization
+    
     # Instruct mode settings (used when MODEL_TYPE is 'instruct')
     INSTRUCT_SYSTEM_PROMPT = os.getenv('INSTRUCT_SYSTEM_PROMPT', 
         'The assistant is in CLI simulation mode, and responds to the user\'s CLI commands only with outputs of the commands.')

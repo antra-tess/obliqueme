@@ -219,11 +219,15 @@ class LLMAgent:
                     {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
                 ],
                 "max_tokens": max_tokens,
-                "temperature": temperature,
-                "provider": {
-                    "quantizations": ["bf16"]
-                }
+                "temperature": temperature
             }
+            
+            # Add provider settings if quantization is specified
+            if self.config.MODEL_QUANTIZATION:
+                payload["provider"] = {
+                    "quantizations": [self.config.MODEL_QUANTIZATION]
+                }
+                
             endpoint = self.config.CHAT_ENDPOINT
         else:
             # Use completions API for base models
@@ -231,11 +235,15 @@ class LLMAgent:
                 "model": self.config.MODEL_NAME,
                 "prompt": prompt,
                 "max_tokens": max_tokens,
-                "temperature": temperature,
-                "provider": {
-                    "quantizations": ["bf16"]
-                }
+                "temperature": temperature
             }
+            
+            # Add provider settings if quantization is specified
+            if self.config.MODEL_QUANTIZATION:
+                payload["provider"] = {
+                    "quantizations": [self.config.MODEL_QUANTIZATION]
+                }
+                
             endpoint = self.config.OPENROUTER_ENDPOINT
 
         # Log the request
