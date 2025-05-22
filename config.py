@@ -16,8 +16,8 @@ class Config:
     MESSAGE_HISTORY_LIMIT = 200
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
     MAX_RESPONSE_LENGTH = 600
-    #OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/completions"
-    OPENROUTER_ENDPOINT = "https://api.hyperbolic.xyz/v1/completions"
+    OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/completions"
+    #OPENROUTER_ENDPOINT = "https://api.hyperbolic.xyz/v1/completions"
     
     # Model configuration
     MODEL_TYPE = os.getenv('MODEL_TYPE', 'base')  # 'base' or 'instruct'
