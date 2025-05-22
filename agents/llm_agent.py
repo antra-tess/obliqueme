@@ -44,7 +44,7 @@ class LLMAgent:
             message = data['message']
             bot = data.get('bot')
             max_tokens = data.get('max_tokens', self.config.MAX_RESPONSE_LENGTH)
-            temperature = data.get('temperature', 0.7)  # Default to 0.7 if not specified
+            temperature = data.get('temperature', 1)  # Default to 0.7 if not specified
 
             formatted_messages = await self.format_messages(message, bot)
             custom_name = data.get('custom_name')
