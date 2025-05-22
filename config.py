@@ -13,9 +13,9 @@ class Config:
     }
     KEYWORD = 'obliqueme'
     RANDOM_STRING_LENGTH = 10
-    MESSAGE_HISTORY_LIMIT = 80
+    MESSAGE_HISTORY_LIMIT = 200
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-    MAX_RESPONSE_LENGTH = 200
+    MAX_RESPONSE_LENGTH = 600
     #OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/completions"
     OPENROUTER_ENDPOINT = "https://api.hyperbolic.xyz/v1/completions"
     
