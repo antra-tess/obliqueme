@@ -256,7 +256,7 @@ class LLMAgent:
                 f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request, model_type: {self.config.MODEL_TYPE}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request, model_type: {self.config.MODEL_TYPE}, model: {self.config.MODEL_NAME}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
             try:
