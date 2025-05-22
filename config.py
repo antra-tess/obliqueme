@@ -18,4 +18,14 @@ class Config:
     MAX_RESPONSE_LENGTH = 200
     #OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/completions"
     OPENROUTER_ENDPOINT = "https://api.hyperbolic.xyz/v1/completions"
+    
+    # Model configuration
+    MODEL_TYPE = os.getenv('MODEL_TYPE', 'base')  # 'base' or 'instruct'
+    MODEL_NAME = os.getenv('MODEL_NAME', 'meta-llama/Meta-Llama-3.1-405B')
+    
+    # Instruct mode settings (used when MODEL_TYPE is 'instruct')
+    INSTRUCT_SYSTEM_PROMPT = os.getenv('INSTRUCT_SYSTEM_PROMPT', 
+        'The assistant is in CLI simulation mode, and responds to the user\'s CLI commands only with outputs of the commands.')
+    INSTRUCT_USER_PREFIX = os.getenv('INSTRUCT_USER_PREFIX', '<cmd>cat untitled.log</cmd>')
+    CHAT_ENDPOINT = os.getenv('CHAT_ENDPOINT', 'https://api.hyperbolic.xyz/v1/chat/completions')
 

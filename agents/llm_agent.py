@@ -56,10 +56,18 @@ class LLMAgent:
 
             # Add seed text if provided
             prompt = formatted_messages
-            if data.get('seed'):
-                prompt += f'<{name}> {data["seed"]}\n'
-            elif not data.get('suppress_name', False):
-                prompt += f'<{name}>\n'
+            if self.config.MODEL_TYPE == 'instruct':
+                # Use colon format for instruct models
+                if data.get('seed'):
+                    prompt += f'{name}: {data["seed"]}'
+                else:
+                    prompt += f'{name}:'
+            else:
+                # Use XML tag format for base models
+                if data.get('seed'):
+                    prompt += f'<{name}> {data["seed"]}\n'
+                elif not data.get('suppress_name', False):
+                    prompt += f'<{name}>\n'
 
             # Request three completions concurrently
             completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
@@ -108,14 +116,16 @@ class LLMAgent:
 
     async def format_messages(self, message, bot=None):
         """
-        Formats the last 50 messages into XML tags.
+        Formats the last 50 messages into appropriate format based on model type.
+        - Base models: XML tags format
+        - Instruct models: Colon format
 
         Args:
             message (discord.Message): The triggering message.
             bot (discord.Client, optional): The bot instance.
 
         Returns:
-            str: Formatted XML string.
+            str: Formatted string.
         """
         channel = message.channel if isinstance(message, discord.Message) else bot.get_channel(message.channel_id)
         formatted = []
@@ -161,7 +171,13 @@ class LLMAgent:
                 if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
 
-                formatted.append(f'<{username}> {clean_content}\n')
+                # Format based on model type
+                if self.config.MODEL_TYPE == 'instruct':
+                    # Use colon format for instruct models
+                    formatted.append(f'{username}: {clean_content}\n')
+                else:
+                    # Use XML tag format for base models
+                    formatted.append(f'<{username}> {clean_content}\n')
         except Exception as e:
             print(f"Error formatting messages: {e}")
         formatted.reverse()
@@ -169,11 +185,12 @@ class LLMAgent:
 
     async def send_completion_request(self, prompt, max_tokens, temperature):
         """
-        Sends the prompt to OpenRouter's completion endpoint.
+        Sends the prompt to the completion or chat endpoint based on model type.
 
         Args:
-            prompt (str): The formatted XML prompt.
+            prompt (str): The formatted prompt.
             max_tokens (int): The maximum number of tokens for the response.
+            temperature (float): The temperature for generation.
 
         Returns:
             str: The response text from the LLM.
@@ -191,33 +208,60 @@ class LLMAgent:
         if temperature is None:
             temperature = 0.8
 
-        payload = {
-            "model": "meta-llama/Meta-Llama-3.1-405B",
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "provider": {
-                "quantizations": ["bf16"]
+        # Choose API format based on model type
+        if self.config.MODEL_TYPE == 'instruct':
+            # Use chat API with prefill for instruct models
+            payload = {
+                "model": self.config.MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": self.config.INSTRUCT_SYSTEM_PROMPT},
+                    {"role": "user", "content": self.config.INSTRUCT_USER_PREFIX},
+                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "provider": {
+                    "quantizations": ["bf16"]
+                }
             }
-        }
+            endpoint = self.config.CHAT_ENDPOINT
+        else:
+            # Use completions API for base models
+            payload = {
+                "model": self.config.MODEL_NAME,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "provider": {
+                    "quantizations": ["bf16"]
+                }
+            }
+            endpoint = self.config.OPENROUTER_ENDPOINT
 
         # Log the request
         with open(log_file, "w", encoding="utf-8") as f:
             f.write("=== REQUEST ===\n")
             f.write(f"Timestamp: {timestamp}\n")
+            f.write(f"Model Type: {self.config.MODEL_TYPE}\n")
+            f.write(f"Model: {self.config.MODEL_NAME}\n")
             f.write(f"Temperature: {temperature}\n")
             f.write(f"Max Tokens: {max_tokens}\n")
-            f.write("=== PROMPT ===\n")
-            f.write(prompt)
+            f.write(f"Endpoint: {endpoint}\n")
+            if self.config.MODEL_TYPE == 'instruct':
+                f.write("=== MESSAGES ===\n")
+                for msg in payload["messages"]:
+                    f.write(f"{msg['role']}: {msg['content']}\n")
+            else:
+                f.write("=== PROMPT ===\n")
+                f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request, model_type: {self.config.MODEL_TYPE}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
             try:
                 async with self.rate_limit:
-                    print(f"Sending LLM request, length: {len(prompt)}, max_tokens: {max_tokens}")
-                    async with self.session.post(self.config.OPENROUTER_ENDPOINT, json=payload,
+                    async with self.session.post(endpoint, json=payload,
                                                  headers=headers) as resp:
                         response_text = await resp.text()
                         
@@ -229,19 +273,25 @@ class LLMAgent:
                             f.write("\n")
 
                         if resp.status != 200:
-                            print(f"OpenRouter API returned status {resp.status}: {response_text}")
+                            print(f"API returned status {resp.status}: {response_text}")
                             return ""
                         
                         data = await resp.json()
                         if 'error' in data:
-                            print(f"OpenRouter API returned error: {data['error']}")
+                            print(f"API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
                                 print("Rate limit hit. Retrying in 1 second...")
                                 await asyncio.sleep(1)
                                 continue
                             return ""
                         
-                        result = data.get("choices", [{}])[0].get("text", "")
+                        # Extract result based on API type
+                        if self.config.MODEL_TYPE == 'instruct':
+                            # Chat API response format
+                            result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        else:
+                            # Completions API response format
+                            result = data.get("choices", [{}])[0].get("text", "")
                         
                         # Log the extracted result
                         with open(log_file, "a", encoding="utf-8") as f:
@@ -296,11 +346,18 @@ class LLMAgent:
             user_messages = []
             for line in lines:
                 if line.strip():
-                    # Check if line starts with a username tag
-                    if line.startswith(f'<{username}>'):
-                        # Remove the username tag
-                        message = line[len(f'<{username}>'):]
-                        user_messages.append(message.strip())
+                    if self.config.MODEL_TYPE == 'instruct':
+                        # Check if line starts with username in colon format
+                        if line.startswith(f'{username}:'):
+                            # Remove the username and colon
+                            message = line[len(f'{username}:'):].strip()
+                            user_messages.append(message)
+                    else:
+                        # Check if line starts with a username tag (XML format)
+                        if line.startswith(f'<{username}>'):
+                            # Remove the username tag
+                            message = line[len(f'<{username}>'):]
+                            user_messages.append(message.strip())
             
             # Join the filtered messages
             return '\n'.join(user_messages)
