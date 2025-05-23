@@ -228,21 +228,14 @@ class LLMAgent:
 
                 if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
-
-                # Add context indicator for thread messages if helpful
-                context_indicator = ""
-                if source == 'parent' and hasattr(channel, 'parent_id'):
-                    context_indicator = "[main] "
-                elif source == 'thread' and hasattr(channel, 'parent_id'):
-                    context_indicator = f"[{channel.name}] "
-
+                
                 # Format based on model type
                 if self.model_config.get('type') == 'instruct':
                     # Use colon format for instruct models
-                    formatted.append(f'{context_indicator}{username}: {clean_content}\n')
+                    formatted.append(f'{username}: {clean_content}\n')
                 else:
                     # Use XML tag format for base models
-                    formatted.append(f'<{context_indicator}{username}> {clean_content}\n')
+                    formatted.append(f'{username}> {clean_content}\n')
                     
         except Exception as e:
             print(f"Error formatting messages: {e}")
