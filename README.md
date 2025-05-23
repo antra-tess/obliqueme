@@ -9,6 +9,7 @@ A Discord bot that uses language models to generate simulated conversations base
 - Multiple generation modes: self (single character) or full (all characters)
 - Temperature control for response variation
 - Custom character impersonation
+- **Thread support**: Works in Discord threads as well as regular channels
 
 ## Model Configuration
 
@@ -72,14 +73,22 @@ Options:
 ### Slash Command
 Use `/oblique` for the same functionality with a cleaner interface.
 
+### Thread Support
+The bot works seamlessly in Discord threads:
+- Use `obliqueme` or `/oblique` in any thread
+- The bot automatically detects thread channels
+- Webhooks are properly managed for thread messaging
+- Thread context is preserved in message history
+
 ## How It Works
 
-1. **Message Collection**: The bot reads the last 200 messages from the channel
+1. **Message Collection**: The bot reads the last 200 messages from the channel or thread
 2. **Formatting**: Messages are formatted according to the model type:
    - Base models: `<username> message content`
    - Instruct models: `username: message content`
 3. **Generation**: For instruct models, the chat history is placed in the assistant message as prefill
 4. **Response Processing**: The generated text is filtered based on the selected mode
+5. **Thread Handling**: For threads, webhooks are automatically created/moved to support thread messaging
 
 ## Installation
 

@@ -335,44 +335,161 @@ class LLMAgent:
         if not response_text:
             return "Error: No response from LLM."
 
-        # Find the first occurrence of </xml>
-        termination_tag = "</stop>"
-        termination_index = response_text.find(termination_tag)
-        if termination_index != -1:
-            processed_text = response_text[:termination_index]
-        else:
-            processed_text = response_text  # Use the whole output if termination tag not found
+        # Remove common termination tags if present
+        termination_tags = ["</stop>", "</xml>", "<|end|>", "<|endoftext|>"]
+        processed_text = response_text
+        for tag in termination_tags:
+            if tag in processed_text:
+                termination_index = processed_text.find(tag)
+                processed_text = processed_text[:termination_index]
+                break
 
-        # Strip the termination tag if present
-        processed_text = processed_text.replace(termination_tag, "")
+        # Clean up any remaining termination tags
+        for tag in termination_tags:
+            processed_text = processed_text.replace(tag, "")
 
         # Handle different modes
         if data and data.get('mode') == 'self':
             # Get the username for filtering
             username = data.get('username', '').replace("[oblique]", "")
             
-            # Split into lines and filter for user's messages
-            lines = processed_text.split('\n')
-            user_messages = []
-            for line in lines:
-                if line.strip():
-                    if self.config.MODEL_TYPE == 'instruct':
-                        # Check if line starts with username in colon format
-                        if line.startswith(f'{username}:'):
-                            # Remove the username and colon
-                            message = line[len(f'{username}:'):].strip()
-                            user_messages.append(message)
-                    else:
-                        # Check if line starts with a username tag (XML format)
-                        if line.startswith(f'<{username}>'):
-                            # Remove the username tag
-                            message = line[len(f'<{username}>'):]
-                            user_messages.append(message.strip())
-            
-            # Join the filtered messages
-            return '\n'.join(user_messages)
+            # For self mode, extract content that belongs to the target user
+            if self.config.MODEL_TYPE == 'instruct':
+                # For colon format, find the user's section
+                result = self._extract_user_content_colon_format(processed_text, username)
+            else:
+                # For XML format, find the user's section  
+                result = self._extract_user_content_xml_format(processed_text, username)
+                
+            return result if result.strip() else processed_text.strip()
         else:
-            return processed_text
+            # For full mode, return the entire response (cleaned)
+            return processed_text.strip()
+
+    def _extract_user_content_colon_format(self, text, username):
+        """
+        Extract content for a specific user from colon-formatted text.
+        This handles multi-line responses better by looking for the user's section.
+        Uses sophisticated heuristics to distinguish speaker changes from regular colons.
+        """
+        lines = text.split('\n')
+        user_content = []
+        in_user_section = False
+        
+        for line in lines:
+            original_line = line
+            line = line.strip()
+            if not line:
+                if in_user_section:
+                    user_content.append('')  # Keep empty lines within user section
+                continue
+                
+            # Check if this line likely starts a new speaker
+            is_speaker_line = self._is_likely_speaker_line_colon(line)
+            
+            if is_speaker_line:
+                speaker_part = line.split(':', 1)[0].strip()
+                # If this line starts with our target username
+                if speaker_part.lower() == username.lower():
+                    in_user_section = True
+                    # Add the content after the colon
+                    content_after_colon = line.split(':', 1)[1].strip()
+                    if content_after_colon:
+                        user_content.append(content_after_colon)
+                else:
+                    # This line starts with a different speaker, stop collecting
+                    if in_user_section:
+                        break
+                    in_user_section = False
+            else:
+                # This is a continuation line (not a speaker change)
+                if in_user_section:
+                    user_content.append(line)
+        
+        return '\n'.join(user_content)
+
+    def _is_likely_speaker_line_colon(self, line):
+        """
+        Determine if a line with a colon is likely indicating a speaker change
+        rather than just containing a colon in regular text.
+        
+        Heuristics:
+        - Colon should be early in the line (within first ~30 characters)
+        - Speaker part should be reasonable length (1-25 characters)
+        - Speaker part shouldn't contain certain punctuation
+        - Speaker part should look like a name/identifier
+        """
+        if ':' not in line:
+            return False
+            
+        colon_pos = line.find(':')
+        speaker_part = line[:colon_pos].strip()
+        
+        # Colon should be reasonably early in the line (not buried in a sentence)
+        if colon_pos > 30:
+            return False
+            
+        # Speaker part should be reasonable length
+        if len(speaker_part) < 1 or len(speaker_part) > 25:
+            return False
+            
+        # Speaker part shouldn't contain punctuation that's unlikely in names
+        # Allow spaces, hyphens, underscores, apostrophes, but not much else
+        invalid_chars = set('.,!?;()[]{}|\\/"<>+=*&^%$#@`~')
+        if any(char in invalid_chars for char in speaker_part):
+            return False
+            
+        # Speaker part shouldn't contain numbers in patterns that suggest time/dates
+        # e.g., "3:00", "12:30", "2023:01"
+        if any(char.isdigit() for char in speaker_part):
+            # If it's all digits or digits with common time separators, probably not a speaker
+            cleaned = speaker_part.replace(' ', '').replace('-', '').replace(':', '')
+            if cleaned.isdigit() or len(cleaned) <= 4:
+                return False
+                
+        # If we get here, it looks like a plausible speaker line
+        return True
+
+    def _extract_user_content_xml_format(self, text, username):
+        """
+        Extract content for a specific user from XML-formatted text.
+        This handles multi-line responses better by looking for the user's section.
+        """
+        lines = text.split('\n')
+        user_content = []
+        in_user_section = False
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                if in_user_section:
+                    user_content.append('')  # Keep empty lines within user section
+                continue
+                
+            # Check if this line starts a new speaker with XML tags
+            if line_stripped.startswith('<') and '>' in line_stripped:
+                # Extract the tag name
+                end_tag_pos = line_stripped.find('>')
+                tag_content = line_stripped[1:end_tag_pos]
+                
+                # If this tag matches our target username
+                if tag_content.lower() == username.lower():
+                    in_user_section = True
+                    # Add the content after the tag
+                    content_after_tag = line_stripped[end_tag_pos + 1:].strip()
+                    if content_after_tag:
+                        user_content.append(content_after_tag)
+                else:
+                    # This line starts with a different speaker, stop collecting
+                    if in_user_section:
+                        break
+                    in_user_section = False
+            else:
+                # This is a continuation line (no XML tag at start)
+                if in_user_section:
+                    user_content.append(line_stripped)
+        
+        return '\n'.join(user_content)
 
     async def enqueue_message(self, data):
         await self.queue.put(data)
