@@ -122,7 +122,8 @@ class MessageHandler(commands.Cog):
                 username=webhook_username,
                 avatar_url=avatar_url,
                 guild_id=interaction.guild_id,
-                view=view
+                view=view,
+                target_channel_id=interaction.channel_id
             )
             print(f"Send result: {sent_message}")
 
@@ -414,7 +415,8 @@ class MessageHandler(commands.Cog):
                 username=webhook_username,
                 avatar_url=avatar_url,
                 guild_id=message.guild.id,
-                view=view
+                view=view,
+                target_channel_id=message.channel.id
             )
 
             if not sent_message:
@@ -527,6 +529,14 @@ class MessageHandler(commands.Cog):
                         # Add page information to the content
                         content_with_page = f"{replacement_text}"
                         
+                        # Normalize line endings (convert \r\n to \n)
+                        content_with_page = content_with_page.replace('\r\n', '\n').replace('\r', '\n')
+                        
+                        # Debug newlines
+                        newline_count = content_with_page.count('\n')
+                        print(f"[DEBUG] Content has {newline_count} newlines before truncation")
+                        print(f"[DEBUG] First 200 chars: {repr(content_with_page[:200])}")
+                        
                         # Truncate if over Discord's 2000 character limit
                         if len(content_with_page) > 2000:
                             # Try to find a good breaking point (sentence ending)
@@ -551,13 +561,19 @@ class MessageHandler(commands.Cog):
                                 
                             print(f"Truncated message from {len(replacement_text)} to {len(content_with_page)} characters")
 
+                        # Debug newlines after truncation
+                        final_newline_count = content_with_page.count('\n')
+                        print(f"[DEBUG] Final content has {final_newline_count} newlines")
+                        print(f"[DEBUG] Final first 200 chars: {repr(content_with_page[:200])}")
+
                         # Edit the message with the LLM-generated replacement and updated view
                         await self.webhook_manager.edit_via_webhook(
                             name=webhook_name,
                             message_id=data['generating_message_id'],
                             new_content=content_with_page,
                             guild_id=data['message'].guild.id,
-                            view=view
+                            view=view,
+                            target_channel_id=data['channel_id']
                         )
                         print(
                             f"Sent LLM-generated replacement (page {page}/{total_pages}) with updated view for user '{data['username']}'.")
@@ -613,7 +629,8 @@ class MessageHandler(commands.Cog):
                                 message_id=original_message.id,
                                 new_content=original_message.content,
                                 guild_id=interaction.guild_id,
-                                view=None  # No buttons
+                                view=None,  # No buttons
+                                target_channel_id=interaction.channel_id
                             )
                             # Clean up context
                             await self.generation_manager.remove_context(original_message.id)
@@ -684,7 +701,8 @@ class MessageHandler(commands.Cog):
                             name=context.parameters.get('webhook_name'),  # Use original webhook
                             message_id=original_message.id,
                             new_content="Regenerating...",
-                            guild_id=interaction.guild_id
+                            guild_id=interaction.guild_id,
+                            target_channel_id=interaction.channel_id
                         )
                         print(f"Regenerating message for {data['username']}")
 
@@ -719,7 +737,8 @@ class MessageHandler(commands.Cog):
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,
-                                view=view
+                                view=view,
+                                target_channel_id=interaction.channel_id
                             )
                             print(f"Updated message after trim for {interaction.user.display_name}")
                         else:
@@ -742,7 +761,8 @@ class MessageHandler(commands.Cog):
                                 message_id=original_message.id,
                                 new_content=new_content,
                                 guild_id=interaction.guild_id,
-                                view=view
+                                view=view,
+                                target_channel_id=interaction.channel_id
                             )
                             print(f"Updated message after {custom_id} for {interaction.user.display_name}")
         except Exception as e:

@@ -78,11 +78,13 @@ class WebhookManager(commands.Cog):
             # If it's a thread, we need to handle it specially
             if is_thread_channel(channel):
                 print(f"Channel {channel_id} is a thread in parent channel {channel.parent_id}")
-                # For threads, we still use the thread's channel_id, but we note it's a thread
-                target_channel_id = channel_id
+                # For threads, we keep the webhook in the parent channel and use thread_id when sending
+                target_channel_id = channel.parent_id
+                print(f"Using parent channel {target_channel_id} for webhook placement")
             else:
                 print(f"Channel {channel_id} is a regular channel")
-                
+                target_channel_id = channel_id
+            
             # First, look for webhooks already in the target channel (or thread)
             print(f"Looking for webhooks already in channel {target_channel_id}")
             for name, webhook in self.webhook_objects[guild_id].items():
@@ -277,7 +279,7 @@ class WebhookManager(commands.Cog):
             print(f"Error moving webhook '{name}' in guild {guild_id}: {e}")
             return None
 
-    async def send_via_webhook(self, name, content, username, avatar_url, guild_id, view=None):
+    async def send_via_webhook(self, name, content, username, avatar_url, guild_id, view=None, target_channel_id=None):
         """
         Sends a message via the specified webhook.
         Supports sending to both regular channels and threads.
@@ -289,12 +291,14 @@ class WebhookManager(commands.Cog):
             avatar_url (str): The avatar URL to display.
             guild_id (int): The ID of the guild.
             view (discord.ui.View, optional): The view containing components to add to the message.
+            target_channel_id (int, optional): The target channel/thread ID for sending.
 
         Returns:
             discord.Message: The sent webhook message object.
         """
         print(f"\nAttempting to send message via webhook '{name}'")
         print(f"Guild ID: {guild_id}")
+        print(f"Target channel ID: {target_channel_id}")
         print(f"Content: {content}")
         print(f"Username: {username}")
         print(f"Avatar URL: {avatar_url}")
@@ -309,36 +313,37 @@ class WebhookManager(commands.Cog):
             print(f"Available webhooks: {list(self.webhook_objects.get(guild_id, {}).keys())}")
             return None
         try:
-            # Detect if webhook is sending to a thread
-            channel = self.bot.get_channel(webhook.channel_id)
-            channel_type = "thread" if is_thread_channel(channel) else "channel"
+            # Determine if we're sending to a thread
+            kwargs = {
+                "content": content,
+                "username": username,
+                "avatar_url": avatar_url,
+                "wait": True,
+                "view": view
+            }
             
-            print(f"Attempting to send message via webhook '{name}' to {channel_type}")
-            print(f"Webhook details - {format_channel_info(channel)}, Token: {webhook.token is not None}")
-            print(f"Message details - Length: {len(content)}, Has View: {view is not None}")
-            try:
-                sent_message = await webhook.send(
-                    content=content,
-                    username=username,
-                    avatar_url=avatar_url,
-                    wait=True,  # Wait for the message to be sent to get the message object
-                    view=view
-                )
-                print(f"Successfully sent message via webhook '{name}' with ID {sent_message.id} to {channel_type}")
-                print(f"Message details - Channel: {sent_message.channel.id}, Author: {sent_message.author}")
-                return sent_message
-            except discord.HTTPException as e:
-                print(f"HTTP error sending message: {e}")
-                return None
-            except Exception as e:
-                print(f"Unexpected error sending message: {e}")
-                return None
+            # If target_channel_id is provided and it's different from webhook's channel, it might be a thread
+            if target_channel_id and target_channel_id != webhook.channel_id:
+                target_channel = self.bot.get_channel(target_channel_id)
+                if target_channel and is_thread_channel(target_channel):
+                    kwargs["thread"] = target_channel
+                    print(f"Sending to thread '{target_channel.name}' (ID: {target_channel_id})")
+                else:
+                    print(f"Warning: target_channel_id {target_channel_id} doesn't match webhook channel {webhook.channel_id}")
+            
+            sent_message = await webhook.send(**kwargs)
+            channel_info = f"channel {sent_message.channel.id}"
+            if hasattr(sent_message.channel, 'parent_id'):
+                channel_info = f"thread '{sent_message.channel.name}' in channel {sent_message.channel.parent_id}"
+            
+            print(f"Successfully sent message via webhook '{name}' with ID {sent_message.id} to {channel_info}")
+            print(f"Message details - Channel: {sent_message.channel.id}, Author: {sent_message.author}")
             return sent_message
         except Exception as e:
             print(f"Error sending message via webhook '{name}': {e}")
             return None
 
-    async def edit_via_webhook(self, name, message_id, new_content, guild_id, view=None):
+    async def edit_via_webhook(self, name, message_id, new_content, guild_id, view=None, target_channel_id=None):
         """
         Edits a specific message sent via the specified webhook.
         Supports editing messages in both regular channels and threads.
@@ -349,6 +354,7 @@ class WebhookManager(commands.Cog):
             new_content (str): The new content for the message.
             guild_id (int): The ID of the guild.
             view (discord.ui.View, optional): The view containing components to add to the message.
+            target_channel_id (int, optional): The target channel/thread ID.
 
         Returns:
             discord.Message: The edited webhook message object.
@@ -358,11 +364,17 @@ class WebhookManager(commands.Cog):
             print(f"Webhook '{name}' not found.")
             return None
         try:
-            # Detect if webhook is editing in a thread
-            channel = self.bot.get_channel(webhook.channel_id)
-            channel_type = "thread" if is_thread_channel(channel) else "channel"
+            # For editing, we need to specify the thread if the message is in a thread
+            kwargs = {"content": new_content, "view": view}
             
-            edited_message = await webhook.edit_message(message_id, content=new_content, view=view)
+            if target_channel_id and target_channel_id != webhook.channel_id:
+                target_channel = self.bot.get_channel(target_channel_id)
+                if target_channel and is_thread_channel(target_channel):
+                    kwargs["thread"] = target_channel
+                    print(f"Editing message in thread '{target_channel.name}' (ID: {target_channel_id})")
+            
+            edited_message = await webhook.edit_message(message_id, **kwargs)
+            channel_type = "thread" if target_channel_id and target_channel_id != webhook.channel_id else "channel"
             print(f"Message ID {message_id} edited via webhook '{name}' in {channel_type}.")
             return edited_message
         except Exception as e:

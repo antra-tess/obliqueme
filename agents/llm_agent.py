@@ -230,7 +230,7 @@ class LLMAgent:
         }
 
         if temperature is None:
-            temperature = 0.8
+            temperature = 1
 
         # Choose API format based on model type
         if self.model_config.get('type') == 'instruct':
@@ -385,7 +385,7 @@ class LLMAgent:
         }
 
         if temperature is None:
-            temperature = 0.8
+            temperature = 1
 
         # Choose API format based on model type
         if self.model_config.get('type') == 'instruct':
@@ -512,6 +512,8 @@ class LLMAgent:
         if not response_text:
             return "Error: No response from LLM."
 
+        print(f"[DEBUG] Raw response has {response_text.count(chr(10))} newlines")
+
         # Remove common termination tags if present
         termination_tags = ["</stop>", "</xml>", "<|end|>", "<|endoftext|>"]
         processed_text = response_text
@@ -525,8 +527,12 @@ class LLMAgent:
         for tag in termination_tags:
             processed_text = processed_text.replace(tag, "")
 
+        print(f"[DEBUG] After tag removal has {processed_text.count(chr(10))} newlines")
+
         # Clean up oblique tags from the response
         processed_text = self._clean_oblique_tags(processed_text)
+
+        print(f"[DEBUG] After oblique tag cleaning has {processed_text.count(chr(10))} newlines")
 
         # Handle different modes
         if data and data.get('mode') == 'self':
@@ -541,10 +547,13 @@ class LLMAgent:
                 # For XML format, find the user's section  
                 result = self._extract_user_content_xml_format(processed_text, username)
                 
-            return result if result.strip() else processed_text.strip()
+            final_result = result if result.strip() else processed_text.strip()
         else:
             # For full mode, return the entire response (cleaned)
-            return processed_text.strip()
+            final_result = processed_text.strip()
+
+        print(f"[DEBUG] Final processed result has {final_result.count(chr(10))} newlines")
+        return final_result
 
     def _extract_user_content_colon_format(self, text, username):
         """
