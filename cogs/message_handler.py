@@ -526,6 +526,30 @@ class MessageHandler(commands.Cog):
 
                         # Add page information to the content
                         content_with_page = f"{replacement_text}"
+                        
+                        # Truncate if over Discord's 2000 character limit
+                        if len(content_with_page) > 2000:
+                            # Try to find a good breaking point (sentence ending)
+                            target_length = 1997 - 3  # Reserve 3 chars for "..."
+                            truncated = content_with_page[:target_length]
+                            
+                            # Try to end at a sentence boundary
+                            sentence_endings = ['. ', '! ', '? ', '\n\n', '\n']
+                            best_break = -1
+                            
+                            for ending in sentence_endings:
+                                last_occurrence = truncated.rfind(ending)
+                                if last_occurrence > target_length * 0.8:  # Only if we don't lose more than 20%
+                                    best_break = last_occurrence + len(ending)
+                                    break
+                            
+                            if best_break > 0:
+                                content_with_page = truncated[:best_break].rstrip() + "..."
+                            else:
+                                # Fallback to simple truncation
+                                content_with_page = truncated.rstrip() + "..."
+                                
+                            print(f"Truncated message from {len(replacement_text)} to {len(content_with_page)} characters")
 
                         # Edit the message with the LLM-generated replacement and updated view
                         await self.webhook_manager.edit_via_webhook(
