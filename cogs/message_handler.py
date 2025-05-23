@@ -21,11 +21,31 @@ class MessageHandler(commands.Cog):
         self.agents_lock = asyncio.Lock()
         self.generation_manager = GenerationManager()
 
+    async def model_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[discord.app_commands.Choice[str]]:
+        """Autocomplete function for model selection"""
+        models = self.config.get_models()
+        choices = []
+        
+        for key, config in models.items():
+            model_name = config['name']
+            # Filter based on current input
+            if current.lower() in model_name.lower():
+                choices.append(discord.app_commands.Choice(name=model_name, value=key))
+        
+        # Return up to 25 choices (Discord limit)
+        return choices[:25]
+
+    @discord.app_commands.autocomplete(model=model_autocomplete)
     @discord.app_commands.command(
         name="oblique",
-        description="Generate a base model simulation of the conversation"
+        description="Generate a model simulation of the conversation"
     )
     @discord.app_commands.describe(
+        model="Choose the AI model to use for generation",
         seed="Starting text for the simulation (optional)",
         mode="Simulation mode: 'self' (default) or 'full'",
         suppress_name="Don't add your name at the end of the prompt",
@@ -35,6 +55,7 @@ class MessageHandler(commands.Cog):
     async def oblique_command(
         self, 
         interaction: discord.Interaction,
+        model: str = None,
         seed: str = None,
         mode: str = "self",
         suppress_name: bool = False,
@@ -43,11 +64,21 @@ class MessageHandler(commands.Cog):
     ):
         """Slash command version of obliqueme"""
         print(f"\nSlash command received from {interaction.user.display_name} in {interaction.guild.name}")
+        print(f"Selected model: {model}")
         # Defer the response as ephemeral and delete it later
         await interaction.response.defer(ephemeral=True)
         print("Response deferred")
         
         try:
+            # Get model configuration
+            model_key = model or self.config.get_default_model_key()
+            model_config = self.config.get_model_config(model_key)
+            if not model_config:
+                await interaction.followup.send(f"Invalid model selected: {model}", ephemeral=True)
+                return
+            
+            print(f"Using model config: {model_config['name']} ({model_key})")
+
             # Get next webhook from the pool
             webhook_name, webhook = await self.webhook_manager.get_next_webhook(interaction.guild_id, interaction.channel_id)
 
@@ -110,7 +141,8 @@ class MessageHandler(commands.Cog):
                 temperature=temperature,
                 avatar_url=avatar_url,
                 target_member_id=target_member_id,
-                webhook_name=webhook_name  # Store the webhook name
+                webhook_name=webhook_name,  # Store the webhook name
+                model_key=model_key  # Store the selected model
             )
             await self.generation_manager.register_message(context, sent_message.id)
 
@@ -128,12 +160,12 @@ class MessageHandler(commands.Cog):
                 'seed': context.parameters.get('seed'),
                 'suppress_name': context.parameters.get('suppress_name', False),
                 'custom_name': context.parameters.get('custom_name'),
-                'temperature': context.parameters.get('temperature')
+                'temperature': context.parameters.get('temperature'),
+                'model_config': model_config  # Add model config to data
             }
 
-            # Get or create agent and process request
-            agent = await self.get_or_create_agent(interaction.user.id)
-            await agent.enqueue_message(data)
+            # Get or create agent with the specific model config
+            agent = await self.get_or_create_agent(interaction.user.id, model_config)
             
             # Delete the deferred response
             await interaction.delete_original_response()
@@ -401,7 +433,7 @@ class MessageHandler(commands.Cog):
                 'temperature': context.parameters.get('temperature')
             }
 
-            # Interact with the LLM agent (stateful)
+            # Interact with the LLM agent (stateful) using default model
             agent = await self.get_or_create_agent(message.author.id)
             await agent.enqueue_message(data)
 
@@ -415,18 +447,26 @@ class MessageHandler(commands.Cog):
             import traceback
             traceback.print_exc()
 
-    async def get_or_create_agent(self, user_id):
+    async def get_or_create_agent(self, user_id, model_config=None):
         """
-        Retrieves an existing LLM agent for the user or creates a new one.
+        Retrieves an existing LLM agent for the user or creates a new one with the specified model config.
 
         Args:
             user_id (int): The Discord user ID.
+            model_config (dict): The model configuration to use.
 
         Returns:
             LLMAgent: The stateful LLM agent instance.
         """
+        # Create a unique agent key based on user_id and model
+        if model_config:
+            model_key = f"{user_id}_{model_config.get('model_id', 'default')}"
+        else:
+            model_key = f"{user_id}_default"
+            model_config = self.config.get_model_config(self.config.get_default_model_key())
+            
         async with self.agents_lock:
-            if user_id not in self.agents:
+            if model_key not in self.agents:
                 # Define the callback function to handle the LLM's response
                 async def llm_callback(data, replacement_text, page, total_pages):
                     """
@@ -480,10 +520,10 @@ class MessageHandler(commands.Cog):
                         import traceback
                         traceback.print_exc()
 
-                agent = LLMAgent(name=f"Agent_{user_id}", config=self.config, callback=llm_callback)
-                self.agents[user_id] = agent
-                print(f"Created new LLM agent for user ID {user_id}.")
-            return self.agents[user_id]
+                agent = LLMAgent(name=f"Agent_{model_key}", config=self.config, callback=llm_callback, model_config=model_config)
+                self.agents[model_key] = agent
+                print(f"Created new LLM agent for user ID {user_id} with model config {model_key}")
+            return self.agents[model_key]
 
     async def cog_unload(self):
         """
