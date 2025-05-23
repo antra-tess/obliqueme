@@ -106,9 +106,9 @@ class MessageHandler(commands.Cog):
                 else:
                     display_name = custom_name
                     print(f"Member '{custom_name}' not found in guild {interaction.guild.name}")
-                webhook_username = f"{display_name}[oblique:{interaction.user.display_name}]"
+                webhook_username = f"{display_name}[oblique:{interaction.user.display_name}:{model_config['name']}]"
             else:
-                webhook_username = f"{interaction.user.display_name}[oblique]"
+                webhook_username = f"{interaction.user.display_name}[oblique:{model_config['name']}]"
 
             # Send initial message
             generating_content = "Oblique: Generating..."
@@ -345,6 +345,16 @@ class MessageHandler(commands.Cog):
             custom_name (str, optional): A custom name to use instead of the author's display name.
         """
         try:
+            # Get default model configuration
+            default_model_key = self.config.get_default_model_key()
+            model_config = self.config.get_model_config(default_model_key)
+            print(f"Text trigger using default model: {default_model_key}")
+            print(f"Model config: {model_config}")
+            
+            if not model_config:
+                print(f"Error: Could not find model config for key '{default_model_key}'")
+                return
+            
             # Check if bot has permission to delete messages
             if message.guild.me.guild_permissions.manage_messages:
                 # Delete the user's original message
@@ -383,9 +393,9 @@ class MessageHandler(commands.Cog):
                     display_name = custom_name
                     avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
                     print(f"Member '{custom_name}' not found in guild {message.guild.name}")
-                webhook_username = f"{display_name}[oblique:{message.author.display_name}]"
+                webhook_username = f"{display_name}[oblique:{message.author.display_name}:{model_config['name']}]"
             else:
-                webhook_username = f"{message.author.display_name}[oblique]"
+                webhook_username = f"{message.author.display_name}[oblique:{model_config['name']}]"
                 avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
 
             # Send 'Generating...' via webhook, capture the message object
@@ -430,11 +440,12 @@ class MessageHandler(commands.Cog):
                 'seed': context.parameters.get('seed'),
                 'suppress_name': context.parameters.get('suppress_name', False),
                 'custom_name': context.parameters.get('custom_name'),
-                'temperature': context.parameters.get('temperature')
+                'temperature': context.parameters.get('temperature'),
+                'model_config': model_config  # Add model config to data
             }
 
             # Interact with the LLM agent (stateful) using default model
-            agent = await self.get_or_create_agent(message.author.id)
+            agent = await self.get_or_create_agent(message.author.id, model_config)
             await agent.enqueue_message(data)
 
         except discord.errors.NotFound:

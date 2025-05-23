@@ -65,7 +65,7 @@ models:
 
 
 # Default model (fallback if none selected)
-default_model: "claude-3-opus"
+default_model: "claude_opus"
 
 # Bot settings
 bot:
