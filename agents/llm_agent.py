@@ -83,16 +83,6 @@ class LLMAgent:
                 # Use single request with n=3 for models that support it
                 print(f"Using n parameter for model {self.model_config.get('name')}")
                 completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, n=3)
-                
-                # Check if we actually got 3 results - if not, fall back to separate requests
-                valid_completions = [c for c in completions if c.strip()]
-                if len(valid_completions) < 3:
-                    print(f"[DEBUG] Only got {len(valid_completions)} valid completions from n parameter, falling back to separate requests")
-                    # Fall back to separate requests
-                    completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
-                    fallback_completions = await asyncio.gather(*completion_tasks)
-                    # Use fallback completions
-                    completions = fallback_completions
             else:
                 # Fall back to separate requests for models that don't support n parameter
                 print(f"Using separate requests for model {self.model_config.get('name')}")
