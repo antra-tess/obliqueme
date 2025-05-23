@@ -208,7 +208,7 @@ class LLMAgent:
         }
 
         if temperature is None:
-            temperature = 0.8
+            temperature = 1
 
         # Choose API format based on model type
         if self.config.MODEL_TYPE == 'instruct':
@@ -347,6 +347,9 @@ class LLMAgent:
         # Clean up any remaining termination tags
         for tag in termination_tags:
             processed_text = processed_text.replace(tag, "")
+
+        # Clean up oblique tags from the response
+        processed_text = self._clean_oblique_tags(processed_text)
 
         # Handle different modes
         if data and data.get('mode') == 'self':
@@ -490,6 +493,20 @@ class LLMAgent:
                     user_content.append(line_stripped)
         
         return '\n'.join(user_content)
+
+    def _clean_oblique_tags(self, text):
+        """
+        Cleans the text from oblique tags.
+
+        Args:
+            text (str): The input text.
+
+        Returns:
+            str: The cleaned text.
+        """
+        # Remove oblique tags from the text
+        cleaned_text = text.replace("[oblique:", "").replace("]", "")
+        return cleaned_text
 
     async def enqueue_message(self, data):
         await self.queue.put(data)
