@@ -652,15 +652,16 @@ class LLMAgent:
             
             # For self mode, extract content that belongs to the target user
             if self.model_config.get('type') == 'instruct':
-                print(f"[DEBUG] Using colon format extraction for instruct model")
-                # For colon format, find the user's section
-                result = self._extract_user_content_colon_format(processed_text, username)
+                print(f"[DEBUG] Using instruct model with stop sequences - no extraction needed")
+                # For instruct models, stop sequences handle the boundaries automatically
+                # Just return the cleaned response directly
+                final_result = processed_text.strip()
             else:
                 print(f"[DEBUG] Using XML format extraction for base model")
                 # For XML format, find the user's section  
                 result = self._extract_user_content_xml_format(processed_text, username)
+                final_result = result if result.strip() else processed_text.strip()
                 
-            final_result = result if result.strip() else processed_text.strip()
             print(f"[DEBUG] Self mode result: {len(final_result)} chars")
         else:
             print(f"[DEBUG] Processing in FULL mode (mode: {data.get('mode') if data else 'None'})")
