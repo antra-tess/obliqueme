@@ -720,6 +720,7 @@ class LLMAgent:
         - Speaker part should be reasonable length (1-25 characters)
         - Speaker part shouldn't contain certain punctuation
         - Speaker part should look like a name/identifier
+        - Ignore colons followed by only whitespace (formatting like "Similarly:")
         """
         if ':' not in line:
             print(f"[DEBUG] Speaker check: No colon in line: {repr(line[:50])}")
@@ -727,8 +728,14 @@ class LLMAgent:
             
         colon_pos = line.find(':')
         speaker_part = line[:colon_pos].strip()
+        content_after_colon = line[colon_pos + 1:].strip()
         
-        print(f"[DEBUG] Speaker check: line={repr(line[:50])}, colon_pos={colon_pos}, speaker_part='{speaker_part}'")
+        print(f"[DEBUG] Speaker check: line={repr(line[:50])}, colon_pos={colon_pos}, speaker_part='{speaker_part}', content_after='{content_after_colon[:20]}'")
+        
+        # If there's no content after the colon (just whitespace), it's likely formatting, not a speaker
+        if not content_after_colon:
+            print(f"[DEBUG] Speaker check: No content after colon (formatting like 'Similarly:')")
+            return False
         
         # Colon should be reasonably early in the line (not buried in a sentence)
         if colon_pos > 30:
