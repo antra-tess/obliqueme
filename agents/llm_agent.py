@@ -235,7 +235,7 @@ class LLMAgent:
                     formatted.append(f'{username}: {clean_content}\n')
                 else:
                     # Use XML tag format for base models
-                    formatted.append(f'{username}> {clean_content}\n')
+                    formatted.append(f'<{username}> {clean_content}\n')
                     
         except Exception as e:
             print(f"Error formatting messages: {e}")
@@ -740,10 +740,15 @@ class LLMAgent:
         # Remove standalone [oblique] tags
         text = text.replace('[oblique]', '')
         
-        # Clean up any extra whitespace that might remain
-        text = re.sub(r'\s+', ' ', text).strip()
+        # Clean up excessive spaces but preserve newlines
+        # Replace multiple spaces with single space, but keep newlines
+        text = re.sub(r'[ \t]+', ' ', text)  # Only collapse spaces and tabs, not newlines
         
-        return text
+        # Clean up any trailing spaces on lines
+        text = re.sub(r' +\n', '\n', text)  # Remove spaces before newlines
+        text = re.sub(r'\n +', '\n', text)  # Remove spaces after newlines
+        
+        return text.strip()
 
     def _clean_username(self, username):
         """
