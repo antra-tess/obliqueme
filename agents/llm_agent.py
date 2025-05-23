@@ -702,7 +702,10 @@ class LLMAgent:
         return re.sub(r'\[.*?\]', '', username).strip()
 
     async def enqueue_message(self, data):
+        print(f"[DEBUG] LLMAgent.enqueue_message called for {self.name}")
+        print(f"[DEBUG] Queue size before: {self.queue.qsize()}")
         await self.queue.put(data)
+        print(f"[DEBUG] Message added to queue, size now: {self.queue.qsize()}")
 
     async def shutdown(self):
         self.task.cancel()

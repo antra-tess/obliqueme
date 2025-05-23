@@ -446,7 +446,10 @@ class MessageHandler(commands.Cog):
 
             # Interact with the LLM agent (stateful) using default model
             agent = await self.get_or_create_agent(message.author.id, model_config)
+            print(f"[DEBUG] Got agent: {agent.name}")
+            print(f"[DEBUG] About to enqueue message with data keys: {list(data.keys())}")
             await agent.enqueue_message(data)
+            print(f"[DEBUG] Message enqueued successfully")
 
         except discord.errors.NotFound:
             print("The message or webhook was not found.")
