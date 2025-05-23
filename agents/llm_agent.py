@@ -135,9 +135,10 @@ class LLMAgent:
 
     async def format_messages(self, message, bot=None):
         """
-        Formats the last 50 messages into appropriate format based on model type.
+        Formats the last messages into appropriate format based on model type.
         - Base models: XML tags format
         - Instruct models: Colon format
+        For threads, includes both parent channel and thread history.
 
         Args:
             message (discord.Message): The triggering message.
@@ -148,11 +149,52 @@ class LLMAgent:
         """
         channel = message.channel if isinstance(message, discord.Message) else bot.get_channel(message.channel_id)
         formatted = []
+        all_messages = []
+        
         try:
-            async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
-                                             before=message if isinstance(message, discord.Message) else None):
+            # Check if we're in a thread
+            if hasattr(channel, 'parent_id') and channel.parent_id:
+                print(f"[DEBUG] Collecting history from thread '{channel.name}' and parent channel")
+                
+                # Get parent channel
+                parent_channel = bot.get_channel(channel.parent_id) if bot else message.guild.get_channel(channel.parent_id)
+                
+                if parent_channel:
+                    # Collect messages from parent channel (limit to half the total)
+                    parent_limit = self.config.MESSAGE_HISTORY_LIMIT // 2
+                    print(f"[DEBUG] Getting {parent_limit} messages from parent channel")
+                    async for msg in parent_channel.history(limit=parent_limit):
+                        all_messages.append((msg, 'parent'))
+                    
+                    # Collect messages from thread (remaining limit)
+                    thread_limit = self.config.MESSAGE_HISTORY_LIMIT - len(all_messages)
+                    print(f"[DEBUG] Getting {thread_limit} messages from thread")
+                    async for msg in channel.history(limit=thread_limit, 
+                                                   before=message if isinstance(message, discord.Message) else None):
+                        all_messages.append((msg, 'thread'))
+                else:
+                    print(f"[DEBUG] Parent channel {channel.parent_id} not found, using thread only")
+                    async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
+                                                   before=message if isinstance(message, discord.Message) else None):
+                        all_messages.append((msg, 'thread'))
+            else:
+                print(f"[DEBUG] Regular channel, collecting normal history")
+                # Regular channel - collect normally
+                async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
+                                               before=message if isinstance(message, discord.Message) else None):
+                    all_messages.append((msg, 'channel'))
+            
+            # Sort all messages by timestamp (oldest first for context)
+            all_messages.sort(key=lambda x: x[0].created_at)
+            
+            print(f"[DEBUG] Total messages collected: {len(all_messages)}")
+            
+            # Process messages
+            for msg, source in all_messages:
+                # Skip bot messages if desired
                 # if msg.author.bot:
-                #    continue  # Skip bot messages if desired
+                #    continue
+                
                 # Get clean username without any square bracket content
                 username = msg.author.display_name
                 username = self._clean_username(username)
@@ -187,16 +229,24 @@ class LLMAgent:
                 if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
 
+                # Add context indicator for thread messages if helpful
+                context_indicator = ""
+                if source == 'parent' and hasattr(channel, 'parent_id'):
+                    context_indicator = "[main] "
+                elif source == 'thread' and hasattr(channel, 'parent_id'):
+                    context_indicator = f"[{channel.name}] "
+
                 # Format based on model type
                 if self.model_config.get('type') == 'instruct':
                     # Use colon format for instruct models
-                    formatted.append(f'{username}: {clean_content}\n')
+                    formatted.append(f'{context_indicator}{username}: {clean_content}\n')
                 else:
                     # Use XML tag format for base models
-                    formatted.append(f'<{username}> {clean_content}\n')
+                    formatted.append(f'<{context_indicator}{username}> {clean_content}\n')
+                    
         except Exception as e:
             print(f"Error formatting messages: {e}")
-        formatted.reverse()
+            
         return "".join(formatted)
 
     async def send_completion_request_with_n(self, prompt, max_tokens, temperature, n=3):
