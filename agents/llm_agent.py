@@ -7,6 +7,7 @@ from collections import deque
 from bs4 import BeautifulSoup  # For stripping HTML content
 from discord import ButtonStyle
 from discord.ui import Button, View
+import re
 
 
 class LLMAgent:
@@ -50,9 +51,9 @@ class LLMAgent:
             custom_name = data.get('custom_name')
             # Handle both Message and Interaction objects
             if isinstance(message, discord.Interaction):
-                name = (custom_name or message.user.display_name).replace("[oblique]", "")
+                name = self._clean_username(custom_name or message.user.display_name)
             else:
-                name = (custom_name or message.author.display_name).replace("[oblique]", "")
+                name = self._clean_username(custom_name or message.author.display_name)
 
             # Add seed text if provided
             prompt = formatted_messages
@@ -136,12 +137,9 @@ class LLMAgent:
                                              before=message if isinstance(message, discord.Message) else None):
                 # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
-                # Get clean username without any oblique tags
+                # Get clean username without any square bracket content
                 username = msg.author.display_name
-                if "[oblique:" in username:
-                    username = username.split("[oblique:")[0].strip()
-                else:
-                    username = username.replace("[oblique]", "").strip()
+                username = self._clean_username(username)
 
                 # Clean up content if it contains oblique tags
                 content = msg.content
@@ -496,7 +494,8 @@ class LLMAgent:
 
     def _clean_oblique_tags(self, text):
         """
-        Cleans the text from oblique tags.
+        Cleans oblique tags from the text while preserving other content.
+        Removes patterns like [oblique:username] and [oblique].
 
         Args:
             text (str): The input text.
@@ -504,9 +503,28 @@ class LLMAgent:
         Returns:
             str: The cleaned text.
         """
-        # Remove oblique tags from the text
-        cleaned_text = text.replace("[oblique:", "").replace("]", "")
-        return cleaned_text
+        # Remove [oblique:username] patterns
+        text = re.sub(r'\[oblique:[^\]]*\]', '', text)
+        
+        # Remove standalone [oblique] tags
+        text = text.replace('[oblique]', '')
+        
+        # Clean up any extra whitespace that might remain
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+
+    def _clean_username(self, username):
+        """
+        Cleans username by removing all square bracket content.
+
+        Args:
+            username (str): The input username.
+
+        Returns:
+            str: The cleaned username.
+        """
+        return re.sub(r'\[.*?\]', '', username).strip()
 
     async def enqueue_message(self, data):
         await self.queue.put(data)
