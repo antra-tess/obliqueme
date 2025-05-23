@@ -164,11 +164,19 @@ class MessageHandler(commands.Cog):
                 'model_config': model_config  # Add model config to data
             }
 
+            print(f"[DEBUG] Prepared data for LLM agent, keys: {list(data.keys())}")
+            print(f"[DEBUG] About to get agent for user {interaction.user.id}")
+
             # Get or create agent with the specific model config
             agent = await self.get_or_create_agent(interaction.user.id, model_config)
+            print(f"[DEBUG] Got agent: {agent.name}")
+            print(f"[DEBUG] About to enqueue message")
+            await agent.enqueue_message(data)
+            print(f"[DEBUG] Message enqueued successfully")
             
             # Delete the deferred response
             await interaction.delete_original_response()
+            print(f"[DEBUG] Deleted deferred response")
 
         except Exception as e:
             print(f"Error handling slash command: {e}")
