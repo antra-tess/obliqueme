@@ -31,8 +31,14 @@ class LLMAgent:
             print("\nWaiting for queue item...")
             data = await self.queue.get()
             print(f"Processing queue item for user {data.get('username')}")
-            await self.handle_message(data)
-            print("Queue item processed")
+            print(f"Model config in use: {self.model_config.get('name', 'Unknown')} ({self.model_config.get('model_id', 'Unknown')})")
+            try:
+                await self.handle_message(data)
+                print("Queue item processed successfully")
+            except Exception as e:
+                print(f"Error processing queue item: {e}")
+                import traceback
+                traceback.print_exc()
             self.queue.task_done()
 
     async def handle_message(self, data):
@@ -74,11 +80,15 @@ class LLMAgent:
             # Request completions - use n parameter if supported, otherwise make separate requests
             if self.model_config.get('supports_n_parameter', False):
                 # Use single request with n=3 for models that support it
+                print(f"Using n parameter for model {self.model_config.get('name')}")
                 completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, n=3)
             else:
                 # Fall back to separate requests for models that don't support n parameter
+                print(f"Using separate requests for model {self.model_config.get('name')}")
                 completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
                 completions = await asyncio.gather(*completion_tasks)
+
+            print(f"Received {len(completions)} completions from API")
 
             # Filter out empty completions and process valid ones
             valid_completions = []
@@ -202,6 +212,11 @@ class LLMAgent:
         Returns:
             list[str]: List of response texts from the LLM.
         """
+        print(f"[DEBUG] Starting send_completion_request_with_n with n={n}")
+        print(f"[DEBUG] Model: {self.model_config.get('model_id')}")
+        print(f"[DEBUG] Endpoint: {self.model_config.get('endpoint')}")
+        print(f"[DEBUG] Prompt length: {len(prompt)}")
+        
         # Create log file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         log_file = os.path.join(self.log_dir, f"{self.name}_{timestamp}.log")
@@ -278,10 +293,13 @@ class LLMAgent:
 
         for _ in range(10):
             try:
+                print(f"[DEBUG] Attempting API request to {endpoint}")
                 async with self.rate_limit:
                     async with self.session.post(endpoint, json=payload,
                                                  headers=headers) as resp:
+                        print(f"[DEBUG] Received response with status {resp.status}")
                         response_text = await resp.text()
+                        print(f"[DEBUG] Response text length: {len(response_text)}")
                         
                         # Log the raw response
                         with open(log_file, "a", encoding="utf-8") as f:
@@ -295,6 +313,7 @@ class LLMAgent:
                             return [""] * n  # Return empty strings for all expected completions
                         
                         data = await resp.json()
+                        print(f"[DEBUG] Parsed JSON response, processing {len(data.get('choices', []))} choices")
                         if 'error' in data:
                             print(f"API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
