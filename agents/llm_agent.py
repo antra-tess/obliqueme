@@ -647,11 +647,14 @@ class LLMAgent:
         This handles multi-line responses better by looking for the user's section.
         Uses sophisticated heuristics to distinguish speaker changes from regular colons.
         """
+        print(f"[DEBUG] Extracting content for username: '{username}'")
+        print(f"[DEBUG] Text length: {len(text)} characters")
+        
         lines = text.split('\n')
         user_content = []
         in_user_section = False
         
-        for line in lines:
+        for i, line in enumerate(lines):
             original_line = line
             line = line.strip()
             if not line:
@@ -664,8 +667,11 @@ class LLMAgent:
             
             if is_speaker_line:
                 speaker_part = line.split(':', 1)[0].strip()
+                print(f"[DEBUG] Line {i+1}: Found speaker line: '{speaker_part}' (target: '{username}')")
+                
                 # If this line starts with our target username
                 if speaker_part.lower() == username.lower():
+                    print(f"[DEBUG] Line {i+1}: MATCH! Starting to collect content for '{username}'")
                     in_user_section = True
                     # Add the content after the colon
                     content_after_colon = line.split(':', 1)[1].strip()
@@ -674,14 +680,23 @@ class LLMAgent:
                 else:
                     # This line starts with a different speaker, stop collecting
                     if in_user_section:
+                        print(f"[DEBUG] Line {i+1}: Found different speaker '{speaker_part}', stopping collection")
                         break
+                    else:
+                        print(f"[DEBUG] Line {i+1}: Different speaker '{speaker_part}', not collecting yet")
                     in_user_section = False
             else:
                 # This is a continuation line (not a speaker change)
                 if in_user_section:
+                    print(f"[DEBUG] Line {i+1}: Adding continuation line to user content")
                     user_content.append(line)
+                else:
+                    print(f"[DEBUG] Line {i+1}: Skipping line (not in user section)")
         
-        return '\n'.join(user_content)
+        result = '\n'.join(user_content)
+        print(f"[DEBUG] Extracted {len(result)} characters for user '{username}'")
+        print(f"[DEBUG] First 200 chars of extracted content: {repr(result[:200])}")
+        return result
 
     def _is_likely_speaker_line_colon(self, line):
         """
@@ -695,23 +710,29 @@ class LLMAgent:
         - Speaker part should look like a name/identifier
         """
         if ':' not in line:
+            print(f"[DEBUG] Speaker check: No colon in line: {repr(line[:50])}")
             return False
             
         colon_pos = line.find(':')
         speaker_part = line[:colon_pos].strip()
         
+        print(f"[DEBUG] Speaker check: line={repr(line[:50])}, colon_pos={colon_pos}, speaker_part='{speaker_part}'")
+        
         # Colon should be reasonably early in the line (not buried in a sentence)
         if colon_pos > 30:
+            print(f"[DEBUG] Speaker check: Colon too far ({colon_pos} > 30)")
             return False
             
         # Speaker part should be reasonable length
         if len(speaker_part) < 1 or len(speaker_part) > 25:
+            print(f"[DEBUG] Speaker check: Speaker part length invalid ({len(speaker_part)})")
             return False
             
         # Speaker part shouldn't contain punctuation that's unlikely in names
         # Allow spaces, hyphens, underscores, apostrophes, but not much else
         invalid_chars = set('.,!?;()[]{}|\\/"<>+=*&^%$#@`~')
         if any(char in invalid_chars for char in speaker_part):
+            print(f"[DEBUG] Speaker check: Invalid chars in speaker part")
             return False
             
         # Speaker part shouldn't contain numbers in patterns that suggest time/dates
@@ -720,9 +741,11 @@ class LLMAgent:
             # If it's all digits or digits with common time separators, probably not a speaker
             cleaned = speaker_part.replace(' ', '').replace('-', '').replace(':', '')
             if cleaned.isdigit() or len(cleaned) <= 4:
+                print(f"[DEBUG] Speaker check: Looks like time/date pattern")
                 return False
                 
         # If we get here, it looks like a plausible speaker line
+        print(f"[DEBUG] Speaker check: VALID speaker line")
         return True
 
     def _extract_user_content_xml_format(self, text, username):
