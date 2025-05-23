@@ -219,7 +219,9 @@ class LLMAgent:
         
         # Create log file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        log_file = os.path.join(self.log_dir, f"{self.name}_{timestamp}.log")
+        # Sanitize agent name for filesystem by replacing unsafe characters
+        safe_name = self.name.replace("/", "_").replace("\\", "_").replace(":", "_")
+        log_file = os.path.join(self.log_dir, f"{safe_name}_{timestamp}.log")
 
         headers = {
             "Content-Type": "application/json",
@@ -372,7 +374,9 @@ class LLMAgent:
         """
         # Create log file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        log_file = os.path.join(self.log_dir, f"{self.name}_{timestamp}.log")
+        # Sanitize agent name for filesystem by replacing unsafe characters
+        safe_name = self.name.replace("/", "_").replace("\\", "_").replace(":", "_")
+        log_file = os.path.join(self.log_dir, f"{safe_name}_{timestamp}.log")
 
         headers = {
             "Content-Type": "application/json",
