@@ -381,7 +381,15 @@ class LLMAgent:
                         
                         data = await resp.json()
                         print(f"[DEBUG] Parsed JSON response, processing {len(data.get('choices', []))} choices")
-                        print(f"[DEBUG] Response structure: {json.dumps(data, indent=2)[:1000]}...")  # First 1000 chars
+                        
+                        # Show just the structure we care about - choices count and basic info
+                        choices = data.get("choices", [])
+                        print(f"[DEBUG] Response has {len(choices)} choices:")
+                        for i, choice in enumerate(choices):
+                            content_length = len(choice.get("message", {}).get("content", choice.get("text", "")[-1000:]))
+                            finish_reason = choice.get("finish_reason", "unknown")
+                            print(f"[DEBUG]   Choice {i+1}: {content_length} chars, finish_reason: {finish_reason}")
+                        
                         if 'error' in data:
                             print(f"API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
@@ -392,8 +400,6 @@ class LLMAgent:
                         
                         # Extract all results based on API type
                         results = []
-                        choices = data.get("choices", [])
-                        
                         for i, choice in enumerate(choices):
                             if self.model_config.get('type') == 'instruct':
                                 # Chat API response format
@@ -534,6 +540,16 @@ class LLMAgent:
                             return ""
                         
                         data = await resp.json()
+                        print(f"[DEBUG] Parsed JSON response, processing {len(data.get('choices', []))} choices")
+                        
+                        # Show just the structure we care about - choices count and basic info
+                        choices = data.get("choices", [])
+                        print(f"[DEBUG] Response has {len(choices)} choices:")
+                        for i, choice in enumerate(choices):
+                            content_length = len(choice.get("message", {}).get("content", choice.get("text", "")))
+                            finish_reason = choice.get("finish_reason", "unknown")
+                            print(f"[DEBUG]   Choice {i+1}: {content_length} chars, finish_reason: {finish_reason}")
+                        
                         if 'error' in data:
                             print(f"API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
