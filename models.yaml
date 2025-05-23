@@ -8,15 +8,17 @@ models:
     endpoint: "https://api.hyperbolic.xyz/v1/completions"
     max_tokens: 200
     quantization: ""
-    
-  llama_70b_base:
-    name: "Llama 3.1 70B (Base)"
-    model_id: "meta-llama/Meta-Llama-3.1-70B"
+    supports_n_parameter: false
+
+  llama_405b_base_or:
+    name: "Llama 3.1 405B (Base) OpenRouter"
+    model_id: "meta-llama/llama-3.1-405b"
     type: "base"
     endpoint: "https://api.hyperbolic.xyz/v1/completions"
     max_tokens: 200
     quantization: ""
-    
+    supports_n_parameter: false
+
   # Instruct models (use chat API with prefill)
   claude_opus:
     name: "Claude 3 Opus"
@@ -27,6 +29,7 @@ models:
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: true
     
   claude_opus_4:
     name: "Claude 4 Opus"
@@ -37,6 +40,7 @@ models:
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: true
     
   claude_sonnet:
     name: "Claude 3.5 Sonnet"
@@ -47,29 +51,21 @@ models:
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
-    
-  llama_70b_instruct:
-    name: "Llama 3.1 70B (Instruct)"
-    model_id: "meta-llama/Meta-Llama-3.1-70B-Instruct"
-    type: "instruct"
-    endpoint: "https://api.hyperbolic.xyz/v1/chat/completions"
-    max_tokens: 400
-    quantization: ""
-    system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
-    user_prefix: "<cmd>cat untitled.log</cmd>"
-    
-  gpt4_turbo:
-    name: "GPT-4 Turbo"
-    model_id: "openai/gpt-4-turbo"
+
+  claude_sonnet:
+    name: "Claude 4 Sonnet"
+    model_id: "anthropic/claude-sonnet-4"
     type: "instruct"
     endpoint: "https://openrouter.ai/api/v1/chat/completions"
-    max_tokens: 500
+    max_tokens: 600
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: true
+
 
 # Default model (fallback if none selected)
-default_model: "llama_405b_base"
+default_model: "claude-3-opus"
 
 # Bot settings
 bot:

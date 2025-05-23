@@ -71,9 +71,14 @@ class LLMAgent:
                 elif not data.get('suppress_name', False):
                     prompt += f'<{name}>\n'
 
-            # Request three completions concurrently
-            completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
-            completions = await asyncio.gather(*completion_tasks)
+            # Request completions - use n parameter if supported, otherwise make separate requests
+            if self.model_config.get('supports_n_parameter', False):
+                # Use single request with n=3 for models that support it
+                completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, n=3)
+            else:
+                # Fall back to separate requests for models that don't support n parameter
+                completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
+                completions = await asyncio.gather(*completion_tasks)
 
             # Filter out empty completions and process valid ones
             valid_completions = []
@@ -134,7 +139,7 @@ class LLMAgent:
         channel = message.channel if isinstance(message, discord.Message) else bot.get_channel(message.channel_id)
         formatted = []
         try:
-            async for msg in channel.history(limit=self.model_config.MESSAGE_HISTORY_LIMIT,
+            async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
                                              before=message if isinstance(message, discord.Message) else None):
                 # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
@@ -173,7 +178,7 @@ class LLMAgent:
                     continue
 
                 # Format based on model type
-                if self.model_config.MODEL_TYPE == 'instruct':
+                if self.model_config.get('type') == 'instruct':
                     # Use colon format for instruct models
                     formatted.append(f'{username}: {clean_content}\n')
                 else:
@@ -183,6 +188,156 @@ class LLMAgent:
             print(f"Error formatting messages: {e}")
         formatted.reverse()
         return "".join(formatted)
+
+    async def send_completion_request_with_n(self, prompt, max_tokens, temperature, n=3):
+        """
+        Sends a single completion request with n parameter for multiple completions.
+
+        Args:
+            prompt (str): The formatted prompt.
+            max_tokens (int): The maximum number of tokens for the response.
+            temperature (float): The temperature for generation.
+            n (int): Number of completions to generate.
+
+        Returns:
+            list[str]: List of response texts from the LLM.
+        """
+        # Create log file name with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        log_file = os.path.join(self.log_dir, f"{self.name}_{timestamp}.log")
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
+            "X-Title": "Oblique"
+        }
+
+        if temperature is None:
+            temperature = 0.8
+
+        # Choose API format based on model type
+        if self.model_config.get('type') == 'instruct':
+            # Use chat API with prefill for instruct models
+            payload = {
+                "model": self.model_config.get('model_id'),
+                "messages": [
+                    {"role": "system", "content": self.model_config.get('system_prompt', '')},
+                    {"role": "user", "content": self.model_config.get('user_prefix', '')},
+                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "n": n
+            }
+            
+            # Add provider settings if quantization is specified
+            if self.model_config.get('quantization'):
+                payload["provider"] = {
+                    "quantizations": [self.model_config.get('quantization')]
+                }
+                
+            endpoint = self.model_config.get('endpoint')
+        else:
+            # Use completions API for base models
+            payload = {
+                "model": self.model_config.get('model_id'),
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "n": n
+            }
+            
+            # Add provider settings if quantization is specified
+            if self.model_config.get('quantization'):
+                payload["provider"] = {
+                    "quantizations": [self.model_config.get('quantization')]
+                }
+                
+            endpoint = self.model_config.get('endpoint')
+
+        # Log the request
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write("=== REQUEST ===\n")
+            f.write(f"Timestamp: {timestamp}\n")
+            f.write(f"Model Type: {self.model_config.get('type')}\n")
+            f.write(f"Model: {self.model_config.get('model_id')}\n")
+            f.write(f"Temperature: {temperature}\n")
+            f.write(f"Max Tokens: {max_tokens}\n")
+            f.write(f"N: {n}\n")
+            f.write(f"Endpoint: {endpoint}\n")
+            if self.model_config.get('type') == 'instruct':
+                f.write("=== MESSAGES ===\n")
+                for msg in payload["messages"]:
+                    f.write(f"{msg['role']}: {msg['content']}\n")
+            else:
+                f.write("=== PROMPT ===\n")
+                f.write(prompt)
+            f.write("\n")
+
+        print(f"Sending LLM request with n={n}, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+
+        for _ in range(10):
+            try:
+                async with self.rate_limit:
+                    async with self.session.post(endpoint, json=payload,
+                                                 headers=headers) as resp:
+                        response_text = await resp.text()
+                        
+                        # Log the raw response
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            f.write("\n=== RESPONSE ===\n")
+                            f.write(f"Status: {resp.status}\n")
+                            f.write(response_text)
+                            f.write("\n")
+
+                        if resp.status != 200:
+                            print(f"API returned status {resp.status}: {response_text}")
+                            return [""] * n  # Return empty strings for all expected completions
+                        
+                        data = await resp.json()
+                        if 'error' in data:
+                            print(f"API returned error: {data['error']}")
+                            if data['error'].get('code') == 429:
+                                print("Rate limit hit. Retrying in 1 second...")
+                                await asyncio.sleep(1)
+                                continue
+                            return [""] * n
+                        
+                        # Extract all results based on API type
+                        results = []
+                        choices = data.get("choices", [])
+                        
+                        for choice in choices:
+                            if self.model_config.get('type') == 'instruct':
+                                # Chat API response format
+                                result = choice.get("message", {}).get("content", "")
+                            else:
+                                # Completions API response format
+                                result = choice.get("text", "")
+                            results.append(result)
+                        
+                        # Ensure we return the expected number of results
+                        while len(results) < n:
+                            results.append("")
+                        
+                        # Log the extracted results
+                        with open(log_file, "a", encoding="utf-8") as f:
+                            f.write("\n=== EXTRACTED RESULTS ===\n")
+                            for i, result in enumerate(results):
+                                f.write(f"Result {i+1}: {result}\n")
+                            f.write("\n")
+                            
+                        return results[:n]  # Return exactly n results
+            except aiohttp.ClientError as e:
+                print(f"HTTP Client Error: {e}. Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"Error sending completion request: {e}")
+                return [""] * n
+        print("Failed to send completion request after 10 retries.")
+        return [""] * n
 
     async def send_completion_request(self, prompt, max_tokens, temperature):
         """
@@ -202,21 +357,21 @@ class LLMAgent:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.model_config.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
             "X-Title": "Oblique"
         }
 
         if temperature is None:
-            temperature = 1
+            temperature = 0.8
 
         # Choose API format based on model type
-        if self.model_config.MODEL_TYPE == 'instruct':
+        if self.model_config.get('type') == 'instruct':
             # Use chat API with prefill for instruct models
             payload = {
-                "model": self.model_config.MODEL_NAME,
+                "model": self.model_config.get('model_id'),
                 "messages": [
-                    {"role": "system", "content": self.model_config.INSTRUCT_SYSTEM_PROMPT},
-                    {"role": "user", "content": self.model_config.INSTRUCT_USER_PREFIX},
+                    {"role": "system", "content": self.model_config.get('system_prompt', '')},
+                    {"role": "user", "content": self.model_config.get('user_prefix', '')},
                     {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
                 ],
                 "max_tokens": max_tokens,
@@ -224,39 +379,39 @@ class LLMAgent:
             }
             
             # Add provider settings if quantization is specified
-            if self.model_config.MODEL_QUANTIZATION:
+            if self.model_config.get('quantization'):
                 payload["provider"] = {
-                    "quantizations": [self.model_config.MODEL_QUANTIZATION]
+                    "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.CHAT_ENDPOINT
+            endpoint = self.model_config.get('endpoint')
         else:
             # Use completions API for base models
             payload = {
-                "model": self.model_config.MODEL_NAME,
+                "model": self.model_config.get('model_id'),
                 "prompt": prompt,
                 "max_tokens": max_tokens,
                 "temperature": temperature
             }
             
             # Add provider settings if quantization is specified
-            if self.model_config.MODEL_QUANTIZATION:
+            if self.model_config.get('quantization'):
                 payload["provider"] = {
-                    "quantizations": [self.model_config.MODEL_QUANTIZATION]
+                    "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.OPENROUTER_ENDPOINT
+            endpoint = self.model_config.get('endpoint')
 
         # Log the request
         with open(log_file, "w", encoding="utf-8") as f:
             f.write("=== REQUEST ===\n")
             f.write(f"Timestamp: {timestamp}\n")
-            f.write(f"Model Type: {self.model_config.MODEL_TYPE}\n")
-            f.write(f"Model: {self.model_config.MODEL_NAME}\n")
+            f.write(f"Model Type: {self.model_config.get('type')}\n")
+            f.write(f"Model: {self.model_config.get('model_id')}\n")
             f.write(f"Temperature: {temperature}\n")
             f.write(f"Max Tokens: {max_tokens}\n")
             f.write(f"Endpoint: {endpoint}\n")
-            if self.model_config.MODEL_TYPE == 'instruct':
+            if self.model_config.get('type') == 'instruct':
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
@@ -265,7 +420,7 @@ class LLMAgent:
                 f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request, model_type: {self.model_config.MODEL_TYPE}, model: {self.model_config.MODEL_NAME}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
             try:
@@ -295,7 +450,7 @@ class LLMAgent:
                             return ""
                         
                         # Extract result based on API type
-                        if self.model_config.MODEL_TYPE == 'instruct':
+                        if self.model_config.get('type') == 'instruct':
                             # Chat API response format
                             result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                         else:
@@ -356,7 +511,7 @@ class LLMAgent:
             username = data.get('username', '').replace("[oblique]", "")
             
             # For self mode, extract content that belongs to the target user
-            if self.model_config.MODEL_TYPE == 'instruct':
+            if self.model_config.get('type') == 'instruct':
                 # For colon format, find the user's section
                 result = self._extract_user_content_colon_format(processed_text, username)
             else:
