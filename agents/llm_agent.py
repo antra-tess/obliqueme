@@ -82,11 +82,11 @@ class LLMAgent:
             if self.model_config.get('supports_n_parameter', False):
                 # Use single request with n=3 for models that support it
                 print(f"Using n parameter for model {self.model_config.get('name')}")
-                completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, n=3)
+                completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, formatted_messages, n=3)
             else:
                 # Fall back to separate requests for models that don't support n parameter
                 print(f"Using separate requests for model {self.model_config.get('name')}")
-                completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
+                completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature, formatted_messages) for _ in range(3)]
                 completions = await asyncio.gather(*completion_tasks)
 
             print(f"Received {len(completions)} completions from API")
@@ -261,14 +261,15 @@ class LLMAgent:
             
         return "".join(formatted)
 
-    async def send_completion_request_with_n(self, prompt, max_tokens, temperature, n=3):
+    async def send_completion_request_with_n(self, prompt, max_tokens, temperature, formatted_messages, n=3):
         """
         Sends a single completion request with n parameter for multiple completions.
 
         Args:
-            prompt (str): The formatted prompt.
+            prompt (str): The formatted prompt including any seed text.
             max_tokens (int): The maximum number of tokens for the response.
             temperature (float): The temperature for generation.
+            formatted_messages (str): The formatted chat history for extracting stop sequences
             n (int): Number of completions to generate.
 
         Returns:
@@ -302,12 +303,18 @@ class LLMAgent:
                 "messages": [
                     {"role": "system", "content": self.model_config.get('system_prompt', '')},
                     {"role": "user", "content": self.model_config.get('user_prefix', '')},
-                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
+                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history + seed
                 ],
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "n": n
             }
+            
+            # Add stop sequences for instruct models
+            stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+            if stop_sequences:
+                payload["stop"] = stop_sequences
+                print(f"[DEBUG] Added stop sequences: {stop_sequences}")
             
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
@@ -348,6 +355,9 @@ class LLMAgent:
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
+                if "stop" in payload:
+                    f.write(f"=== STOP SEQUENCES ===\n")
+                    f.write(f"{payload['stop']}\n")
             else:
                 f.write("=== PROMPT ===\n")
                 f.write(prompt)
@@ -436,14 +446,15 @@ class LLMAgent:
         print("Failed to send completion request after 10 retries.")
         return [""] * n
 
-    async def send_completion_request(self, prompt, max_tokens, temperature):
+    async def send_completion_request(self, prompt, max_tokens, temperature, formatted_messages):
         """
         Sends the prompt to the completion or chat endpoint based on model type.
 
         Args:
-            prompt (str): The formatted prompt.
+            prompt (str): The formatted prompt including any seed text.
             max_tokens (int): The maximum number of tokens for the response.
             temperature (float): The temperature for generation.
+            formatted_messages (str): The formatted chat history for extracting stop sequences
 
         Returns:
             str: The response text from the LLM.
@@ -471,11 +482,17 @@ class LLMAgent:
                 "messages": [
                     {"role": "system", "content": self.model_config.get('system_prompt', '')},
                     {"role": "user", "content": self.model_config.get('user_prefix', '')},
-                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
+                    {"role": "assistant", "content": prompt}  # Prefill with the entire chat history + seed
                 ],
                 "max_tokens": max_tokens,
                 "temperature": temperature
             }
+            
+            # Add stop sequences for instruct models
+            stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+            if stop_sequences:
+                payload["stop"] = stop_sequences
+                print(f"[DEBUG] Added stop sequences: {stop_sequences}")
             
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
@@ -514,6 +531,9 @@ class LLMAgent:
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
+                if "stop" in payload:
+                    f.write(f"=== STOP SEQUENCES ===\n")
+                    f.write(f"{payload['stop']}\n")
             else:
                 f.write("=== PROMPT ===\n")
                 f.write(prompt)
@@ -860,3 +880,35 @@ class LLMAgent:
         except asyncio.CancelledError:
             pass
         await self.session.close()
+
+    def _extract_usernames_from_messages(self, formatted_messages):
+        """
+        Extract unique usernames from formatted messages to use as stop sequences.
+        
+        Args:
+            formatted_messages (str): The formatted chat history
+            
+        Returns:
+            list[str]: List of unique usernames followed by colons
+        """
+        usernames = set()
+        lines = formatted_messages.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # For colon format, extract username before first colon
+            if ':' in line:
+                potential_username = line.split(':', 1)[0].strip()
+                # Basic validation - should look like a username
+                if (len(potential_username) > 0 and 
+                    len(potential_username) <= 25 and
+                    not any(char in potential_username for char in '.,!?;()[]{}|\\/"<>+=*&^%$#@`~')):
+                    usernames.add(potential_username)
+        
+        # Convert to stop sequences (username + colon)
+        stop_sequences = [f"{username}:" for username in usernames]
+        print(f"[DEBUG] Extracted stop sequences: {stop_sequences}")
+        return stop_sequences
