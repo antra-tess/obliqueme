@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup  # For stripping HTML content
 from discord import ButtonStyle
 from discord.ui import Button, View
 import re
+import json
 
 
 class LLMAgent:
@@ -82,6 +83,16 @@ class LLMAgent:
                 # Use single request with n=3 for models that support it
                 print(f"Using n parameter for model {self.model_config.get('name')}")
                 completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, n=3)
+                
+                # Check if we actually got 3 results - if not, fall back to separate requests
+                valid_completions = [c for c in completions if c.strip()]
+                if len(valid_completions) < 3:
+                    print(f"[DEBUG] Only got {len(valid_completions)} valid completions from n parameter, falling back to separate requests")
+                    # Fall back to separate requests
+                    completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature) for _ in range(3)]
+                    fallback_completions = await asyncio.gather(*completion_tasks)
+                    # Use fallback completions
+                    completions = fallback_completions
             else:
                 # Fall back to separate requests for models that don't support n parameter
                 print(f"Using separate requests for model {self.model_config.get('name')}")
@@ -160,18 +171,36 @@ class LLMAgent:
                 parent_channel = bot.get_channel(channel.parent_id) if bot else message.guild.get_channel(channel.parent_id)
                 
                 if parent_channel:
-                    # Collect messages from parent channel (limit to half the total)
-                    parent_limit = self.config.MESSAGE_HISTORY_LIMIT // 2
-                    print(f"[DEBUG] Getting {parent_limit} messages from parent channel")
-                    async for msg in parent_channel.history(limit=parent_limit):
-                        all_messages.append((msg, 'parent'))
-                    
-                    # Collect messages from thread (remaining limit)
-                    thread_limit = self.config.MESSAGE_HISTORY_LIMIT - len(all_messages)
-                    print(f"[DEBUG] Getting {thread_limit} messages from thread")
-                    async for msg in channel.history(limit=thread_limit, 
+                    # First, get all available thread messages
+                    print(f"[DEBUG] Getting thread history")
+                    thread_messages = []
+                    async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
                                                    before=message if isinstance(message, discord.Message) else None):
-                        all_messages.append((msg, 'thread'))
+                        thread_messages.append((msg, 'thread'))
+                    
+                    print(f"[DEBUG] Got {len(thread_messages)} messages from thread")
+                    
+                    # Calculate remaining limit for parent channel
+                    remaining_limit = self.config.MESSAGE_HISTORY_LIMIT - len(thread_messages)
+                    
+                    if remaining_limit > 0:
+                        # Get the thread creation time to use as cutoff for parent channel history
+                        thread_creation_time = channel.created_at
+                        print(f"[DEBUG] Thread created at: {thread_creation_time}")
+                        print(f"[DEBUG] Getting up to {remaining_limit} parent channel messages before thread creation")
+                        
+                        # Get parent channel history up to thread creation time
+                        parent_messages = []
+                        async for msg in parent_channel.history(limit=remaining_limit, before=thread_creation_time):
+                            parent_messages.append((msg, 'parent'))
+                        
+                        print(f"[DEBUG] Got {len(parent_messages)} messages from parent channel before thread creation")
+                        
+                        # Combine all messages
+                        all_messages = parent_messages + thread_messages
+                    else:
+                        print(f"[DEBUG] Thread used full message limit, no parent channel history needed")
+                        all_messages = thread_messages
                 else:
                     print(f"[DEBUG] Parent channel {channel.parent_id} not found, using thread only")
                     async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
@@ -335,6 +364,9 @@ class LLMAgent:
             f.write("\n")
 
         print(f"Sending LLM request with n={n}, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        
+        # Debug the payload before sending
+        print(f"[DEBUG] Request payload: {json.dumps(payload, indent=2)}")
 
         for _ in range(10):
             try:
@@ -359,6 +391,7 @@ class LLMAgent:
                         
                         data = await resp.json()
                         print(f"[DEBUG] Parsed JSON response, processing {len(data.get('choices', []))} choices")
+                        print(f"[DEBUG] Response structure: {json.dumps(data, indent=2)[:1000]}...")  # First 1000 chars
                         if 'error' in data:
                             print(f"API returned error: {data['error']}")
                             if data['error'].get('code') == 429:
@@ -371,7 +404,7 @@ class LLMAgent:
                         results = []
                         choices = data.get("choices", [])
                         
-                        for choice in choices:
+                        for i, choice in enumerate(choices):
                             if self.model_config.get('type') == 'instruct':
                                 # Chat API response format
                                 result = choice.get("message", {}).get("content", "")
@@ -379,10 +412,14 @@ class LLMAgent:
                                 # Completions API response format
                                 result = choice.get("text", "")
                             results.append(result)
+                            print(f"[DEBUG] Choice {i+1}: {len(result)} characters")
                         
                         # Ensure we return the expected number of results
                         while len(results) < n:
                             results.append("")
+                            print(f"[DEBUG] Added empty result to reach n={n}")
+                        
+                        print(f"[DEBUG] Returning {len(results)} results")
                         
                         # Log the extracted results
                         with open(log_file, "a", encoding="utf-8") as f:
