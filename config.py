@@ -1,4 +1,5 @@
 import os
+import yaml
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -11,25 +12,139 @@ class Config:
         # Add more webhooks as needed
         # 'alerts': os.getenv('WEBHOOK_ALERTS'),
     }
-    KEYWORD = 'obliqueme'
-    RANDOM_STRING_LENGTH = 10
-    MESSAGE_HISTORY_LIMIT = 200
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-    MAX_RESPONSE_LENGTH = 600
-    OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/completions"
-    #OPENROUTER_ENDPOINT = "https://api.hyperbolic.xyz/v1/completions"
     
-    # Model configuration
-    MODEL_TYPE = os.getenv('MODEL_TYPE', 'base')  # 'base' or 'instruct'
-    MODEL_NAME = os.getenv('MODEL_NAME', 'meta-llama/Meta-Llama-3.1-405B')
+    # Load model configurations from YAML
+    @classmethod
+    def load_models_config(cls):
+        """Load model configurations from models.yaml"""
+        try:
+            with open('models.yaml', 'r') as file:
+                config = yaml.safe_load(file)
+                cls._models_config = config
+                return config
+        except FileNotFoundError:
+            print("Warning: models.yaml not found, using default configuration")
+            cls._models_config = cls._get_default_config()
+            return cls._models_config
+        except Exception as e:
+            print(f"Error loading models.yaml: {e}")
+            cls._models_config = cls._get_default_config()
+            return cls._models_config
     
-    # Optional provider settings
-    MODEL_QUANTIZATION = os.getenv('MODEL_QUANTIZATION', '')  # e.g., 'bf16' - leave empty for no quantization
+    @classmethod
+    def _get_default_config(cls):
+        """Fallback configuration if YAML file is not found"""
+        return {
+            'models': {
+                'llama_405b_base': {
+                    'name': 'Llama 3.1 405B (Base)',
+                    'model_id': 'meta-llama/Meta-Llama-3.1-405B',
+                    'type': 'base',
+                    'endpoint': 'https://api.hyperbolic.xyz/v1/completions',
+                    'max_tokens': 200,
+                    'quantization': ''
+                }
+            },
+            'default_model': 'llama_405b_base',
+            'bot': {
+                'keyword': 'obliqueme',
+                'random_string_length': 10,
+                'message_history_limit': 80
+            }
+        }
     
-    # Instruct mode settings (used when MODEL_TYPE is 'instruct')
-    INSTRUCT_SYSTEM_PROMPT = os.getenv('INSTRUCT_SYSTEM_PROMPT', 
-        'The assistant is in CLI simulation mode, and responds to the user\'s CLI commands only with outputs of the commands.')
-    INSTRUCT_USER_PREFIX = os.getenv('INSTRUCT_USER_PREFIX', '<cmd>cat untitled.log</cmd>')
-    #CHAT_ENDPOINT = os.getenv('CHAT_ENDPOINT', 'https://api.hyperbolic.xyz/v1/chat/completions')
-    CHAT_ENDPOINT = os.getenv('CHAT_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions')
+    @classmethod
+    def get_models(cls):
+        """Get all available model configurations"""
+        if not hasattr(cls, '_models_config'):
+            cls.load_models_config()
+        return cls._models_config.get('models', {})
+    
+    @classmethod
+    def get_model_config(cls, model_key):
+        """Get configuration for a specific model"""
+        models = cls.get_models()
+        return models.get(model_key)
+    
+    @classmethod
+    def get_default_model_key(cls):
+        """Get the default model key"""
+        if not hasattr(cls, '_models_config'):
+            cls.load_models_config()
+        return cls._models_config.get('default_model', 'llama_405b_base')
+    
+    @classmethod
+    def get_model_choices(cls):
+        """Get model choices for Discord dropdowns (name, value pairs)"""
+        models = cls.get_models()
+        choices = []
+        for key, config in models.items():
+            choices.append((config['name'], key))
+        return choices
+    
+    # Bot settings from YAML
+    @property
+    def KEYWORD(cls):
+        if not hasattr(cls, '_models_config'):
+            cls.load_models_config()
+        return cls._models_config.get('bot', {}).get('keyword', 'obliqueme')
+    
+    @property
+    def RANDOM_STRING_LENGTH(cls):
+        if not hasattr(cls, '_models_config'):
+            cls.load_models_config()
+        return cls._models_config.get('bot', {}).get('random_string_length', 10)
+    
+    @property
+    def MESSAGE_HISTORY_LIMIT(cls):
+        if not hasattr(cls, '_models_config'):
+            cls.load_models_config()
+        return cls._models_config.get('bot', {}).get('message_history_limit', 80)
+    
+    # Legacy properties for backward compatibility - these will use default model
+    @property
+    def MODEL_TYPE(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('type', 'base') if default_model else 'base'
+    
+    @property
+    def MODEL_NAME(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('model_id', 'meta-llama/Meta-Llama-3.1-405B') if default_model else 'meta-llama/Meta-Llama-3.1-405B'
+    
+    @property
+    def MAX_RESPONSE_LENGTH(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('max_tokens', 200) if default_model else 200
+    
+    @property
+    def OPENROUTER_ENDPOINT(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('endpoint', 'https://api.hyperbolic.xyz/v1/completions') if default_model else 'https://api.hyperbolic.xyz/v1/completions'
+    
+    @property
+    def MODEL_QUANTIZATION(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('quantization', '') if default_model else ''
+    
+    @property
+    def INSTRUCT_SYSTEM_PROMPT(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('system_prompt', 'The assistant is in CLI simulation mode, and responds to the user\'s CLI commands only with outputs of the commands.') if default_model else 'The assistant is in CLI simulation mode, and responds to the user\'s CLI commands only with outputs of the commands.'
+    
+    @property
+    def INSTRUCT_USER_PREFIX(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        return default_model.get('user_prefix', '<cmd>cat untitled.log</cmd>') if default_model else '<cmd>cat untitled.log</cmd>'
+    
+    @property
+    def CHAT_ENDPOINT(cls):
+        default_model = cls.get_model_config(cls.get_default_model_key())
+        if default_model and default_model.get('type') == 'instruct':
+            return default_model.get('endpoint', 'https://openrouter.ai/api/v1/chat/completions')
+        return 'https://openrouter.ai/api/v1/chat/completions'
+
+# Load the configuration on import
+Config.load_models_config()
 

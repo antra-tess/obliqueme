@@ -11,9 +11,10 @@ import re
 
 
 class LLMAgent:
-    def __init__(self, name, config, callback):
+    def __init__(self, name, config, callback, model_config=None):
         self.name = name
         self.config = config
+        self.model_config = model_config or config.get_model_config(config.get_default_model_key())
         self.callback = callback  # Function to call with the response
         self.state = {}
         self.queue = asyncio.Queue()
@@ -44,7 +45,7 @@ class LLMAgent:
         try:
             message = data['message']
             bot = data.get('bot')
-            max_tokens = data.get('max_tokens', self.config.MAX_RESPONSE_LENGTH)
+            max_tokens = data.get('max_tokens', self.model_config.get('max_tokens', 200))
             temperature = data.get('temperature', 1)  # Default to 0.7 if not specified
 
             formatted_messages = await self.format_messages(message, bot)
@@ -57,7 +58,7 @@ class LLMAgent:
 
             # Add seed text if provided
             prompt = formatted_messages
-            if self.config.MODEL_TYPE == 'instruct':
+            if self.model_config.get('type') == 'instruct':
                 # Use colon format for instruct models
                 if data.get('seed'):
                     prompt += f'{name}: {data["seed"]}'
@@ -133,7 +134,7 @@ class LLMAgent:
         channel = message.channel if isinstance(message, discord.Message) else bot.get_channel(message.channel_id)
         formatted = []
         try:
-            async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
+            async for msg in channel.history(limit=self.model_config.MESSAGE_HISTORY_LIMIT,
                                              before=message if isinstance(message, discord.Message) else None):
                 # if msg.author.bot:
                 #    continue  # Skip bot messages if desired
@@ -172,7 +173,7 @@ class LLMAgent:
                     continue
 
                 # Format based on model type
-                if self.config.MODEL_TYPE == 'instruct':
+                if self.model_config.MODEL_TYPE == 'instruct':
                     # Use colon format for instruct models
                     formatted.append(f'{username}: {clean_content}\n')
                 else:
@@ -201,7 +202,7 @@ class LLMAgent:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {self.model_config.OPENROUTER_API_KEY}",
             "X-Title": "Oblique"
         }
 
@@ -209,13 +210,13 @@ class LLMAgent:
             temperature = 1
 
         # Choose API format based on model type
-        if self.config.MODEL_TYPE == 'instruct':
+        if self.model_config.MODEL_TYPE == 'instruct':
             # Use chat API with prefill for instruct models
             payload = {
-                "model": self.config.MODEL_NAME,
+                "model": self.model_config.MODEL_NAME,
                 "messages": [
-                    {"role": "system", "content": self.config.INSTRUCT_SYSTEM_PROMPT},
-                    {"role": "user", "content": self.config.INSTRUCT_USER_PREFIX},
+                    {"role": "system", "content": self.model_config.INSTRUCT_SYSTEM_PROMPT},
+                    {"role": "user", "content": self.model_config.INSTRUCT_USER_PREFIX},
                     {"role": "assistant", "content": prompt}  # Prefill with the entire chat history
                 ],
                 "max_tokens": max_tokens,
@@ -223,39 +224,39 @@ class LLMAgent:
             }
             
             # Add provider settings if quantization is specified
-            if self.config.MODEL_QUANTIZATION:
+            if self.model_config.MODEL_QUANTIZATION:
                 payload["provider"] = {
-                    "quantizations": [self.config.MODEL_QUANTIZATION]
+                    "quantizations": [self.model_config.MODEL_QUANTIZATION]
                 }
                 
-            endpoint = self.config.CHAT_ENDPOINT
+            endpoint = self.model_config.CHAT_ENDPOINT
         else:
             # Use completions API for base models
             payload = {
-                "model": self.config.MODEL_NAME,
+                "model": self.model_config.MODEL_NAME,
                 "prompt": prompt,
                 "max_tokens": max_tokens,
                 "temperature": temperature
             }
             
             # Add provider settings if quantization is specified
-            if self.config.MODEL_QUANTIZATION:
+            if self.model_config.MODEL_QUANTIZATION:
                 payload["provider"] = {
-                    "quantizations": [self.config.MODEL_QUANTIZATION]
+                    "quantizations": [self.model_config.MODEL_QUANTIZATION]
                 }
                 
-            endpoint = self.config.OPENROUTER_ENDPOINT
+            endpoint = self.model_config.OPENROUTER_ENDPOINT
 
         # Log the request
         with open(log_file, "w", encoding="utf-8") as f:
             f.write("=== REQUEST ===\n")
             f.write(f"Timestamp: {timestamp}\n")
-            f.write(f"Model Type: {self.config.MODEL_TYPE}\n")
-            f.write(f"Model: {self.config.MODEL_NAME}\n")
+            f.write(f"Model Type: {self.model_config.MODEL_TYPE}\n")
+            f.write(f"Model: {self.model_config.MODEL_NAME}\n")
             f.write(f"Temperature: {temperature}\n")
             f.write(f"Max Tokens: {max_tokens}\n")
             f.write(f"Endpoint: {endpoint}\n")
-            if self.config.MODEL_TYPE == 'instruct':
+            if self.model_config.MODEL_TYPE == 'instruct':
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
@@ -264,7 +265,7 @@ class LLMAgent:
                 f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request, model_type: {self.config.MODEL_TYPE}, model: {self.config.MODEL_NAME}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request, model_type: {self.model_config.MODEL_TYPE}, model: {self.model_config.MODEL_NAME}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
 
         for _ in range(10):
             try:
@@ -294,7 +295,7 @@ class LLMAgent:
                             return ""
                         
                         # Extract result based on API type
-                        if self.config.MODEL_TYPE == 'instruct':
+                        if self.model_config.MODEL_TYPE == 'instruct':
                             # Chat API response format
                             result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                         else:
@@ -355,7 +356,7 @@ class LLMAgent:
             username = data.get('username', '').replace("[oblique]", "")
             
             # For self mode, extract content that belongs to the target user
-            if self.config.MODEL_TYPE == 'instruct':
+            if self.model_config.MODEL_TYPE == 'instruct':
                 # For colon format, find the user's section
                 result = self._extract_user_content_colon_format(processed_text, username)
             else:
