@@ -622,19 +622,28 @@ class LLMAgent:
 
         # Handle different modes
         if data and data.get('mode') == 'self':
+            print(f"[DEBUG] Processing in SELF mode")
             # Get the username for filtering
-            username = data.get('username', '').replace("[oblique]", "")
+            raw_username = data.get('username', '')
+            print(f"[DEBUG] Raw username from data: '{raw_username}'")
+            username = raw_username.replace("[oblique]", "")
+            print(f"[DEBUG] Username after oblique removal: '{username}'")
+            print(f"[DEBUG] Target username for extraction: '{username}'")
             
             # For self mode, extract content that belongs to the target user
             if self.model_config.get('type') == 'instruct':
+                print(f"[DEBUG] Using colon format extraction for instruct model")
                 # For colon format, find the user's section
                 result = self._extract_user_content_colon_format(processed_text, username)
             else:
+                print(f"[DEBUG] Using XML format extraction for base model")
                 # For XML format, find the user's section  
                 result = self._extract_user_content_xml_format(processed_text, username)
                 
             final_result = result if result.strip() else processed_text.strip()
+            print(f"[DEBUG] Self mode result: {len(final_result)} chars")
         else:
+            print(f"[DEBUG] Processing in FULL mode (mode: {data.get('mode') if data else 'None'})")
             # For full mode, return the entire response (cleaned)
             final_result = processed_text.strip()
 
@@ -646,13 +655,15 @@ class LLMAgent:
         Extract content for a specific user from colon-formatted text.
         This handles multi-line responses better by looking for the user's section.
         Uses sophisticated heuristics to distinguish speaker changes from regular colons.
+        For instruct models with prefill, assumes content at the beginning belongs to target user.
         """
         print(f"[DEBUG] Extracting content for username: '{username}'")
         print(f"[DEBUG] Text length: {len(text)} characters")
         
         lines = text.split('\n')
         user_content = []
-        in_user_section = False
+        in_user_section = True  # Start in user section for prefill models
+        found_explicit_user_line = False  # Track if we found an explicit speaker line for the user
         
         for i, line in enumerate(lines):
             original_line = line
@@ -673,17 +684,17 @@ class LLMAgent:
                 if speaker_part.lower() == username.lower():
                     print(f"[DEBUG] Line {i+1}: MATCH! Starting to collect content for '{username}'")
                     in_user_section = True
+                    found_explicit_user_line = True
                     # Add the content after the colon
                     content_after_colon = line.split(':', 1)[1].strip()
                     if content_after_colon:
                         user_content.append(content_after_colon)
                 else:
-                    # This line starts with a different speaker, stop collecting
+                    # This line starts with a different speaker
+                    print(f"[DEBUG] Line {i+1}: Found different speaker '{speaker_part}', stopping collection")
+                    # If we were in user section (either from prefill or explicit), stop here
                     if in_user_section:
-                        print(f"[DEBUG] Line {i+1}: Found different speaker '{speaker_part}', stopping collection")
                         break
-                    else:
-                        print(f"[DEBUG] Line {i+1}: Different speaker '{speaker_part}', not collecting yet")
                     in_user_section = False
             else:
                 # This is a continuation line (not a speaker change)
@@ -695,6 +706,7 @@ class LLMAgent:
         
         result = '\n'.join(user_content)
         print(f"[DEBUG] Extracted {len(result)} characters for user '{username}'")
+        print(f"[DEBUG] Found explicit user speaker line: {found_explicit_user_line}")
         print(f"[DEBUG] First 200 chars of extracted content: {repr(result[:200])}")
         return result
 
