@@ -32,7 +32,7 @@ models:
     supports_n_parameter: true
     
   claude_opus_4:
-    name: "Claude 4 Opus"
+    name: "Claude Opus 4"
     model_id: "anthropic/claude-opus-4"
     type: "instruct"
     endpoint: "https://openrouter.ai/api/v1/chat/completions"
@@ -42,15 +42,37 @@ models:
     user_prefix: "<cmd>cat untitled.log</cmd>"
     supports_n_parameter: true
     
-  claude_sonnet:
-    name: "Claude 3.5 Sonnet"
-    model_id: "anthropic/claude-3.5-sonnet"
+  claude_37_sonnet:
+    name: "Claude 3.7 Sonnet"
+    model_id: "anthropic/claude-3.7-sonnet"
     type: "instruct"
     endpoint: "https://openrouter.ai/api/v1/chat/completions"
     max_tokens: 600
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
+
+  claude_4_sonnet:
+    name: "Claude Sonnet 4"
+    model_id: "anthropic/claude-sonnet-4"
+    type: "instruct"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    max_tokens: 600
+    quantization: ""
+    system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
+    user_prefix: "<cmd>cat untitled.log</cmd>"
+
+      # Instruct models (use chat API with prefill)
+  claude_opus:
+    name: "Claude 3 Opus"
+    model_id: "anthropic/claude-3-opus"
+    type: "instruct"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    max_tokens: 600
+    quantization: ""
+    system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
+    user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: true
 
   claude_sonnet:
     name: "Claude 4 Sonnet"
