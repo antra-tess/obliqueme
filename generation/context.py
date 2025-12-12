@@ -13,7 +13,10 @@ class GenerationContext:
             'custom_name': parameters.get('custom_name'),
             'temperature': parameters.get('temperature'),
             'avatar_url': parameters.get('avatar_url'),
-            'webhook_name': parameters.get('webhook_name')  # Store the webhook name
+            'webhook_name': parameters.get('webhook_name'),  # Store the webhook name
+            'model_key': parameters.get('model_key'),  # Store the selected model key for reroll
+            'target_member_id': parameters.get('target_member_id'),  # Store target member for avatar
+            'llm_username': parameters.get('llm_username')  # Store username for LLM identification
         }
         self.history = deque(maxlen=10)
         self.current_index = 0

@@ -216,7 +216,8 @@ class LLMAgent:
                 #    continue
                 
                 # Get clean username without any square bracket content
-                username = msg.author.display_name
+                # Use actual username (.name) for consistent LLM identification
+                username = msg.author.name
                 username = self._clean_username(username)
 
                 # Clean up content if it contains oblique tags

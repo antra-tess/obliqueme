@@ -94,20 +94,24 @@ class MessageHandler(commands.Cog):
             avatar_url = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             
             # Handle custom name and avatar
+            # Use display_name for webhook appearance, but username (.name) for LLM identification
             if custom_name:
                 target_member = self.find_member_by_name(custom_name, interaction.guild)
                 print(f"Looking up member '{custom_name}' in guild {interaction.guild.name}")
                 if target_member:
                     display_name = target_member.display_name
+                    llm_username = target_member.name  # Use actual username for LLM
                     avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
                     # Store the target member's ID for avatar updates
                     target_member_id = target_member.id
-                    print(f"Found member: {display_name} (ID: {target_member_id}), avatar URL: {avatar_url}")
+                    print(f"Found member: {display_name} (username: {llm_username}, ID: {target_member_id}), avatar URL: {avatar_url}")
                 else:
                     display_name = custom_name
+                    llm_username = custom_name  # Use custom_name as-is for LLM
                     print(f"Member '{custom_name}' not found in guild {interaction.guild.name}")
                 webhook_username = f"{display_name}[oblique:{interaction.user.display_name}:{model_config['name']}]"
             else:
+                llm_username = interaction.user.name  # Use actual username for LLM
                 webhook_username = f"{interaction.user.display_name}[oblique:{model_config['name']}]"
 
             # Send initial message
@@ -143,16 +147,18 @@ class MessageHandler(commands.Cog):
                 avatar_url=avatar_url,
                 target_member_id=target_member_id,
                 webhook_name=webhook_name,  # Store the webhook name
-                model_key=model_key  # Store the selected model
+                model_key=model_key,  # Store the selected model
+                llm_username=llm_username  # Store username for LLM identification
             )
             await self.generation_manager.register_message(context, sent_message.id)
 
             # Prepare data for LLM agent
+            # Use username (.name) for LLM identification, not display_name
             data = {
                 'message': interaction,
                 'generating_message_id': sent_message.id,
                 'channel_id': interaction.channel_id,
-                'username': context.parameters.get('custom_name') or interaction.user.display_name,
+                'username': llm_username,
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': interaction.user.id,
@@ -391,19 +397,23 @@ class MessageHandler(commands.Cog):
             view = self.create_cancel_view()
 
             # Handle custom name and avatar
+            # Use display_name for webhook appearance, but username (.name) for LLM identification
             if custom_name:
                 target_member = self.find_member_by_name(custom_name, message.guild)
                 print(f"Looking up member '{custom_name}' in guild {message.guild.name}")
                 if target_member:
                     display_name = target_member.display_name
+                    llm_username = target_member.name  # Use actual username for LLM
                     avatar_url = target_member.display_avatar.url if target_member.display_avatar else None
-                    print(f"Found member: {display_name}, avatar URL: {avatar_url}")
+                    print(f"Found member: {display_name} (username: {llm_username}), avatar URL: {avatar_url}")
                 else:
                     display_name = custom_name
+                    llm_username = custom_name  # Use custom_name as-is for LLM
                     avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
                     print(f"Member '{custom_name}' not found in guild {message.guild.name}")
                 webhook_username = f"{display_name}[oblique:{message.author.display_name}:{model_config['name']}]"
             else:
+                llm_username = message.author.name  # Use actual username for LLM
                 webhook_username = f"{message.author.display_name}[oblique:{model_config['name']}]"
                 avatar_url = message.author.display_avatar.url if message.author.display_avatar else None
 
@@ -432,16 +442,21 @@ class MessageHandler(commands.Cog):
                 seed=seed,
                 suppress_name=suppress_name,
                 custom_name=custom_name,
-                temperature=temperature
+                temperature=temperature,
+                avatar_url=avatar_url,
+                webhook_name=webhook_name,
+                model_key=default_model_key,  # Store model key for reroll
+                llm_username=llm_username  # Store username for LLM identification
             )
             await self.generation_manager.register_message(context, sent_message.id)
 
             # Prepare data for the LLM agent
+            # Use username (.name) for LLM identification, not display_name
             data = {
                 'message': message,
                 'generating_message_id': sent_message.id,
                 'channel_id': message.channel.id,
-                'username': context.parameters.get('custom_name') or message.author.display_name,
+                'username': llm_username,
                 'webhook': webhook_name,
                 'bot': self.bot,
                 'user_id': message.author.id,
@@ -680,20 +695,28 @@ class MessageHandler(commands.Cog):
                             print(f"No webhook name found in context for message {original_message.id}")
                             return
 
+                        # Get the model config from stored model_key
+                        model_key = context.parameters.get('model_key') or self.config.get_default_model_key()
+                        model_config = self.config.get_model_config(model_key)
+                        print(f"Reroll using model: {model_key} ({model_config.get('name', 'Unknown')})")
+
                         # Prepare data for the LLM agent
+                        # Use stored llm_username for consistent identification
                         data = {
                             'message': original_message,
                             'generating_message_id': original_message.id,
                             'channel_id': interaction.channel_id,
-                            'username': context.parameters.get('custom_name') or interaction.user.display_name,
+                            'username': context.parameters.get('llm_username') or interaction.user.name,
                             'webhook': webhook_name,
+                            'bot': self.bot,
                             'context': context,
                             'mode': context.parameters.get('mode', 'self'),
                             'seed': context.parameters.get('seed'),
                             'suppress_name': context.parameters.get('suppress_name', False),
                             'custom_name': context.parameters.get('custom_name'),
                             'temperature': context.parameters.get('temperature'),
-                            'avatar_url': avatar_url
+                            'avatar_url': avatar_url,
+                            'model_config': model_config
                         }
 
                         # Edit the message to show "Regenerating..." using original webhook
@@ -706,8 +729,8 @@ class MessageHandler(commands.Cog):
                         )
                         print(f"Regenerating message for {data['username']}")
 
-                        # Interact with the LLM agent (stateful)
-                        agent = await self.get_or_create_agent(user_id)
+                        # Interact with the LLM agent (stateful) with the correct model config
+                        agent = await self.get_or_create_agent(user_id, model_config)
                         await agent.enqueue_message(data)
 
                         # The button states and content will be updated in the LLM callback
