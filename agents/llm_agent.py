@@ -681,6 +681,13 @@ class LLMAgent:
             # For full mode, return the entire response (cleaned)
             final_result = processed_text.strip()
 
+        # Prepend seed text if provided - the seed was used as prefill in the prompt,
+        # but the LLM response only contains the continuation, so we need to add it back
+        if data and data.get('seed'):
+            seed_text = data.get('seed')
+            final_result = f"{seed_text} {final_result}" if final_result else seed_text
+            print(f"[DEBUG] Prepended seed text: '{seed_text}'")
+
         print(f"[DEBUG] Final processed result has {final_result.count(chr(10))} newlines")
         return final_result
 
