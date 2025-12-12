@@ -67,25 +67,34 @@ class WebhookManager(commands.Cog):
         """
         print(f"\nGetting next webhook for guild {guild_id}, channel {channel_id}")
         
+        # Get the channel object to check if it's a thread (do this before lock to allow async fetch)
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+                print(f"[DEBUG] Fetched channel {channel_id} (not in cache)")
+            except Exception as e:
+                print(f"[DEBUG] Could not fetch channel {channel_id}: {e}")
+        
         async with self.lock:
             # Initialize if needed
             if guild_id not in self.webhook_objects:
                 self.webhook_objects[guild_id] = {}
             if guild_id not in self.current_index:
                 self.current_index[guild_id] = 0
-                
-            # Get the channel object to check if it's a thread
-            channel = self.bot.get_channel(channel_id)
             
             # For webhook placement, always use the parent channel for threads
             # Webhooks can't truly "be in" a thread - they stay in parent and use thread= param
-            if is_thread_channel(channel):
+            if channel and is_thread_channel(channel):
                 webhook_channel_id = channel.parent_id
                 print(f"Channel {channel_id} is a thread in parent channel {channel.parent_id}")
                 print(f"Webhook will be placed in parent channel {webhook_channel_id}")
             else:
                 webhook_channel_id = channel_id
-                print(f"Channel {channel_id} is a regular channel")
+                if channel:
+                    print(f"Channel {channel_id} is a regular channel")
+                else:
+                    print(f"Channel {channel_id} not found, assuming regular channel")
             
             # First, look for webhooks already in the webhook channel (parent for threads)
             print(f"Looking for webhooks already in channel {webhook_channel_id}")
@@ -301,6 +310,13 @@ class WebhookManager(commands.Cog):
             # Check if target is a thread - if so, use thread= parameter
             if target_channel_id:
                 target_channel = self.bot.get_channel(target_channel_id)
+                # If not in cache, try to fetch it (threads may not be cached)
+                if not target_channel:
+                    try:
+                        target_channel = await self.bot.fetch_channel(target_channel_id)
+                        print(f"[DEBUG] Fetched channel {target_channel_id} (not in cache)")
+                    except Exception as e:
+                        print(f"[DEBUG] Could not fetch channel {target_channel_id}: {e}")
                 if target_channel and is_thread_channel(target_channel):
                     # Verify webhook is in the parent channel
                     if webhook.channel_id == target_channel.parent_id:
@@ -353,6 +369,13 @@ class WebhookManager(commands.Cog):
             # Check if target is a thread
             if target_channel_id:
                 target_channel = self.bot.get_channel(target_channel_id)
+                # If not in cache, try to fetch it (threads may not be cached)
+                if not target_channel:
+                    try:
+                        target_channel = await self.bot.fetch_channel(target_channel_id)
+                        print(f"[DEBUG] Fetched channel {target_channel_id} (not in cache)")
+                    except Exception as e:
+                        print(f"[DEBUG] Could not fetch channel {target_channel_id}: {e}")
                 if target_channel and is_thread_channel(target_channel):
                     kwargs["thread"] = target_channel
                     print(f"Editing message in thread '{target_channel.name}' (ID: {target_channel_id})")
