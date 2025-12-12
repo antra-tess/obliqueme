@@ -383,6 +383,7 @@ class LLMAgent:
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._get_api_key()}",
+            "Accept-Encoding": "identity",  # Avoid gzip issues with some servers
             "X-Title": "Oblique"
         }
 
@@ -420,7 +421,7 @@ class LLMAgent:
                     "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.get('endpoint')
+            endpoint = self.model_config.get('endpoint', '').rstrip('/')
         else:
             # Use completions API for base models
             payload = {
@@ -437,7 +438,7 @@ class LLMAgent:
                     "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.get('endpoint')
+            endpoint = self.model_config.get('endpoint', '').rstrip('/')
 
         # Log the request
         with open(log_file, "w", encoding="utf-8") as f:
@@ -568,6 +569,7 @@ class LLMAgent:
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._get_api_key()}",
+            "Accept-Encoding": "identity",  # Avoid gzip issues with some servers
             "X-Title": "Oblique"
         }
 
@@ -604,7 +606,7 @@ class LLMAgent:
                     "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.get('endpoint')
+            endpoint = self.model_config.get('endpoint', '').rstrip('/')
         else:
             # Use completions API for base models
             payload = {
@@ -620,7 +622,7 @@ class LLMAgent:
                     "quantizations": [self.model_config.get('quantization')]
                 }
                 
-            endpoint = self.model_config.get('endpoint')
+            endpoint = self.model_config.get('endpoint', '').rstrip('/')
 
         # Log the request
         with open(log_file, "w", encoding="utf-8") as f:

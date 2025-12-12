@@ -112,7 +112,7 @@ models:
     name: "Mistral 671B"
     model_id: "/models/Mistral-Large-3-675B-Base-2512"
     type: "base"
-    endpoint: "http://chat.tesserae.cc/v1/completions/"
+    endpoint: "https://chat.tesserae.cc/v1/completions"
     max_tokens: 600
     quantization: ""
     api_key_env: "TESSERAE_API_KEY"  # Use this env var for API key instead of OPENROUTER_API_KEY
