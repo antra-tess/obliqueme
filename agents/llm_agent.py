@@ -159,7 +159,9 @@ class LLMAgent:
                 print(f"[DEBUG] Collecting history from thread '{channel.name}' and parent channel")
                 
                 # Get parent channel
-                parent_channel = bot.get_channel(channel.parent_id) if bot else message.guild.get_channel(channel.parent_id)
+                parent_channel = bot.get_channel(channel.parent_id) if bot else None
+                if not parent_channel and hasattr(message, 'guild') and message.guild:
+                    parent_channel = message.guild.get_channel(channel.parent_id)
                 
                 if parent_channel:
                     # First, get all available thread messages
@@ -175,17 +177,26 @@ class LLMAgent:
                     remaining_limit = self.config.MESSAGE_HISTORY_LIMIT - len(thread_messages)
                     
                     if remaining_limit > 0:
-                        # Get the thread creation time to use as cutoff for parent channel history
-                        thread_creation_time = channel.created_at
-                        print(f"[DEBUG] Thread created at: {thread_creation_time}")
-                        print(f"[DEBUG] Getting up to {remaining_limit} parent channel messages before thread creation")
+                        # For parent channel history, we want messages from before the thread was created
+                        # Use the oldest thread message as a reference point, or just get recent history
+                        print(f"[DEBUG] Getting up to {remaining_limit} parent channel messages")
                         
-                        # Get parent channel history up to thread creation time
+                        # Get parent channel history
+                        # If we have thread messages, use the oldest one as the "before" reference
+                        # This ensures we get context leading up to when the thread started
                         parent_messages = []
-                        async for msg in parent_channel.history(limit=remaining_limit, before=thread_creation_time):
+                        before_ref = None
+                        if thread_messages:
+                            # thread_messages are in reverse order (newest first from history())
+                            # so the last one is the oldest thread message
+                            oldest_thread_msg = thread_messages[-1][0]
+                            before_ref = oldest_thread_msg
+                            print(f"[DEBUG] Using oldest thread message as reference: {oldest_thread_msg.id}")
+                        
+                        async for msg in parent_channel.history(limit=remaining_limit, before=before_ref):
                             parent_messages.append((msg, 'parent'))
                         
-                        print(f"[DEBUG] Got {len(parent_messages)} messages from parent channel before thread creation")
+                        print(f"[DEBUG] Got {len(parent_messages)} messages from parent channel")
                         
                         # Combine all messages
                         all_messages = parent_messages + thread_messages

@@ -61,7 +61,10 @@ class WebhookManager(commands.Cog):
                 print(f"Error initializing webhook '{name}': {e}")
 
     async def get_next_webhook(self, guild_id, channel_id):
-        """Get the next available webhook in the pool, preferring webhooks already in the target channel."""
+        """Get the next available webhook in the pool, preferring webhooks already in the target channel.
+        
+        For threads: webhooks stay in the parent channel and we use thread= parameter when sending.
+        """
         print(f"\nGetting next webhook for guild {guild_id}, channel {channel_id}")
         
         async with self.lock:
@@ -73,22 +76,21 @@ class WebhookManager(commands.Cog):
                 
             # Get the channel object to check if it's a thread
             channel = self.bot.get_channel(channel_id)
-            target_channel_id = channel_id
             
-            # If it's a thread, we need to handle it specially
+            # For webhook placement, always use the parent channel for threads
+            # Webhooks can't truly "be in" a thread - they stay in parent and use thread= param
             if is_thread_channel(channel):
+                webhook_channel_id = channel.parent_id
                 print(f"Channel {channel_id} is a thread in parent channel {channel.parent_id}")
-                # For threads, we keep the webhook in the parent channel and use thread_id when sending
-                target_channel_id = channel.parent_id
-                print(f"Using parent channel {target_channel_id} for webhook placement")
+                print(f"Webhook will be placed in parent channel {webhook_channel_id}")
             else:
+                webhook_channel_id = channel_id
                 print(f"Channel {channel_id} is a regular channel")
-                target_channel_id = channel_id
             
-            # First, look for webhooks already in the target channel (or thread)
-            print(f"Looking for webhooks already in channel {target_channel_id}")
+            # First, look for webhooks already in the webhook channel (parent for threads)
+            print(f"Looking for webhooks already in channel {webhook_channel_id}")
             for name, webhook in self.webhook_objects[guild_id].items():
-                if webhook.channel_id == target_channel_id:
+                if webhook.channel_id == webhook_channel_id:
                     print(f"Found webhook {name} already in target channel")
                     return name, webhook
             
@@ -102,11 +104,11 @@ class WebhookManager(commands.Cog):
         # Handle webhook creation or movement outside lock
         if not webhook:
             print(f"Creating new webhook {webhook_name}")
-            webhook = await self.create_webhook(webhook_name, target_channel_id)
+            webhook = await self.create_webhook(webhook_name, webhook_channel_id)
         else:
-            print(f"Moving webhook {webhook_name} from channel {webhook.channel_id} to {target_channel_id}")
-            # For threads, we need to get the actual channel object
-            target_channel = self.bot.get_channel(target_channel_id)
+            print(f"Moving webhook {webhook_name} from channel {webhook.channel_id} to {webhook_channel_id}")
+            # Move webhook to the parent channel (not the thread itself)
+            target_channel = self.bot.get_channel(webhook_channel_id)
             webhook = await self.move_webhook(guild_id, webhook_name, target_channel)
             if webhook:
                 print(f"Successfully moved webhook {webhook_name}")
@@ -134,10 +136,12 @@ class WebhookManager(commands.Cog):
         """
         Creates a new webhook in the specified channel or returns an existing one.
         For thread channels, creates the webhook in the parent channel.
+        
+        Note: Webhooks always stay in parent channels. For threads, use thread= param when sending.
 
         Args:
             name (str): The name of the webhook.
-            channel_id (int): The ID of the target channel (can be a thread).
+            channel_id (int): The ID of the target channel (should be parent channel, not thread).
 
         Returns:
             discord.Webhook: The created or existing webhook object.
@@ -147,19 +151,15 @@ class WebhookManager(commands.Cog):
             print(f"Error: Channel with ID {channel_id} not found.")
             return None
 
-        # If it's a thread, we need to create the webhook in the parent channel
-        # but we'll move it to the thread afterwards
+        # If someone passed a thread ID, get the parent channel instead
         if is_thread_channel(channel):
-            print(f"Channel {channel_id} is a thread, creating webhook in parent channel {channel.parent_id}")
-            parent_channel = get_parent_channel(self.bot, channel)
-            if not parent_channel:
-                print(f"Error: Parent channel {channel.parent_id} not found for thread {channel_id}")
+            print(f"Warning: create_webhook called with thread ID {channel_id}, using parent channel instead")
+            channel = get_parent_channel(self.bot, channel)
+            if not channel:
+                print(f"Error: Parent channel not found for thread {channel_id}")
                 return None
-            webhook_creation_channel = parent_channel
-        else:
-            webhook_creation_channel = channel
 
-        guild_id = webhook_creation_channel.guild.id
+        guild_id = channel.guild.id
         async with self.lock:
             try:
                 # Initialize guild dict if it doesn't exist
@@ -169,53 +169,21 @@ class WebhookManager(commands.Cog):
                 # Check if the webhook already exists in our objects for this guild
                 if name in self.webhook_objects[guild_id]:
                     print(f"Webhook '{name}' already exists in guild {guild_id}.")
-                    existing_webhook = self.webhook_objects[guild_id][name]
-                    
-                    # If we need to move it to a thread, do that
-                    if channel != webhook_creation_channel:
-                        print(f"Moving existing webhook {name} to thread {channel_id}")
-                        try:
-                            await existing_webhook.edit(channel=channel)
-                            print(f"Successfully moved webhook {name} to thread {channel.name}")
-                        except Exception as e:
-                            print(f"Failed to move webhook {name} to thread: {e}")
-                    
-                    return existing_webhook
+                    return self.webhook_objects[guild_id][name]
 
-                # Check if the webhook already exists in the creation channel
-                existing_webhooks = await webhook_creation_channel.webhooks()
+                # Check if the webhook already exists in the channel
+                existing_webhooks = await channel.webhooks()
                 existing_webhook = discord.utils.get(existing_webhooks, name=name)
 
                 if existing_webhook:
-                    print(f"Webhook '{name}' already exists in channel '{webhook_creation_channel.name}' (ID: {webhook_creation_channel.id}).")
+                    print(f"Webhook '{name}' already exists in channel '{channel.name}' (ID: {channel.id}).")
                     self.webhook_objects[guild_id][name] = existing_webhook
-                    
-                    # If we need to move it to a thread, do that
-                    if channel != webhook_creation_channel:
-                        print(f"Moving existing webhook {name} to thread {channel_id}")
-                        try:
-                            await existing_webhook.edit(channel=channel)
-                            print(f"Successfully moved webhook {name} to thread {channel.name}")
-                        except Exception as e:
-                            print(f"Failed to move webhook {name} to thread: {e}")
-                    
                     return existing_webhook
 
                 # Create a new webhook if it doesn't exist
-                webhook = await webhook_creation_channel.create_webhook(name=name)
-                
-                # If we created it for a thread, move it to the thread
-                if channel != webhook_creation_channel:
-                    print(f"Moving newly created webhook {name} to thread {channel_id}")
-                    try:
-                        await webhook.edit(channel=channel)
-                        print(f"Successfully moved new webhook {name} to thread {channel.name}")
-                    except Exception as e:
-                        print(f"Failed to move new webhook {name} to thread: {e}")
-                        # If we can't move to thread, the webhook is still usable from parent
-                
+                webhook = await channel.create_webhook(name=name)
                 self.webhook_objects[guild_id][name] = webhook
-                print(f"Webhook '{name}' created and set up for channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}.")
+                print(f"Webhook '{name}' created in channel '{channel.name}' (ID: {channel.id}) in guild {guild_id}.")
                 return webhook
             except Exception as e:
                 print(f"Error managing webhook '{name}' in guild {guild_id}: {e}")
@@ -224,12 +192,14 @@ class WebhookManager(commands.Cog):
     async def move_webhook(self, guild_id, name, channel):
         """
         Moves the specified webhook to a different channel within the same guild.
-        Supports both regular channels and thread channels.
+        
+        Note: Webhooks cannot be moved to threads. For threads, keep webhook in parent
+        and use thread= parameter when sending.
 
         Args:
             guild_id (int): The ID of the guild.
             name (str): The name of the webhook.
-            channel (discord.TextChannel or discord.Thread): The target channel.
+            channel (discord.TextChannel): The target channel (must not be a thread).
 
         Returns:
             discord.Webhook: The updated webhook object.
@@ -242,19 +212,24 @@ class WebhookManager(commands.Cog):
             print(f"Webhook '{name}' not found in guild {guild_id}.")
             return None
         
+        # Don't allow moving to threads - use thread= param when sending instead
+        if is_thread_channel(channel):
+            print(f"Cannot move webhook to thread. Use thread= parameter when sending.")
+            # Return the existing webhook - it can still be used with thread= param
+            return webhook
+        
         if channel.guild.id != guild_id:
             print(f"Cannot move webhook '{name}' to a different guild.")
             return None
         
         # Check if it's already in the target channel
         if webhook.channel_id == channel.id:
-            print(f"Webhook '{name}' is already in the target channel/thread.")
+            print(f"Webhook '{name}' is already in the target channel.")
             return webhook
             
         try:
-            channel_type = "thread" if is_thread_channel(channel) else "channel"
-            print(f"Attempting to move webhook '{name}' to {channel_type} '{channel.name}'...")
-            print(f"Webhook before move - Channel: {webhook.channel_id}, Token: {webhook.token is not None}")
+            print(f"Attempting to move webhook '{name}' to channel '{channel.name}'...")
+            print(f"Webhook before move - Channel: {webhook.channel_id}")
             
             try:
                 # Move webhook without lock
@@ -264,7 +239,7 @@ class WebhookManager(commands.Cog):
                 # Verify move was successful
                 async with self.lock:
                     moved_webhook = self.webhook_objects[guild_id][name]
-                    print(f"Webhook after move - Channel: {moved_webhook.channel_id}, Token: {moved_webhook.token is not None}")
+                    print(f"Webhook after move - Channel: {moved_webhook.channel_id}")
                     if moved_webhook.channel_id != channel.id:
                         print("WARNING: Webhook channel ID mismatch after move!")
                 
@@ -283,6 +258,8 @@ class WebhookManager(commands.Cog):
         """
         Sends a message via the specified webhook.
         Supports sending to both regular channels and threads.
+        
+        For threads: webhook stays in parent channel, we use thread= parameter.
 
         Args:
             name (str): The name of the webhook.
@@ -299,9 +276,8 @@ class WebhookManager(commands.Cog):
         print(f"\nAttempting to send message via webhook '{name}'")
         print(f"Guild ID: {guild_id}")
         print(f"Target channel ID: {target_channel_id}")
-        print(f"Content: {content}")
+        print(f"Content length: {len(content)}")
         print(f"Username: {username}")
-        print(f"Avatar URL: {avatar_url}")
         
         if self.initialized == False:
             print("Initializing webhooks...")
@@ -313,7 +289,7 @@ class WebhookManager(commands.Cog):
             print(f"Available webhooks: {list(self.webhook_objects.get(guild_id, {}).keys())}")
             return None
         try:
-            # Determine if we're sending to a thread
+            # Build kwargs for webhook.send()
             kwargs = {
                 "content": content,
                 "username": username,
@@ -322,25 +298,32 @@ class WebhookManager(commands.Cog):
                 "view": view
             }
             
-            # If target_channel_id is provided and it's different from webhook's channel, it might be a thread
-            if target_channel_id and target_channel_id != webhook.channel_id:
+            # Check if target is a thread - if so, use thread= parameter
+            if target_channel_id:
                 target_channel = self.bot.get_channel(target_channel_id)
                 if target_channel and is_thread_channel(target_channel):
-                    kwargs["thread"] = target_channel
-                    print(f"Sending to thread '{target_channel.name}' (ID: {target_channel_id})")
-                else:
+                    # Verify webhook is in the parent channel
+                    if webhook.channel_id == target_channel.parent_id:
+                        kwargs["thread"] = target_channel
+                        print(f"Sending to thread '{target_channel.name}' (ID: {target_channel_id}) via parent channel webhook")
+                    else:
+                        print(f"Warning: webhook channel {webhook.channel_id} doesn't match thread's parent {target_channel.parent_id}")
+                        # Try to send anyway with thread param
+                        kwargs["thread"] = target_channel
+                elif target_channel_id != webhook.channel_id:
                     print(f"Warning: target_channel_id {target_channel_id} doesn't match webhook channel {webhook.channel_id}")
             
             sent_message = await webhook.send(**kwargs)
             channel_info = f"channel {sent_message.channel.id}"
-            if hasattr(sent_message.channel, 'parent_id'):
+            if hasattr(sent_message.channel, 'parent_id') and sent_message.channel.parent_id:
                 channel_info = f"thread '{sent_message.channel.name}' in channel {sent_message.channel.parent_id}"
             
             print(f"Successfully sent message via webhook '{name}' with ID {sent_message.id} to {channel_info}")
-            print(f"Message details - Channel: {sent_message.channel.id}, Author: {sent_message.author}")
             return sent_message
         except Exception as e:
             print(f"Error sending message via webhook '{name}': {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     async def edit_via_webhook(self, name, message_id, new_content, guild_id, view=None, target_channel_id=None):
@@ -367,18 +350,25 @@ class WebhookManager(commands.Cog):
             # For editing, we need to specify the thread if the message is in a thread
             kwargs = {"content": new_content, "view": view}
             
-            if target_channel_id and target_channel_id != webhook.channel_id:
+            # Check if target is a thread
+            if target_channel_id:
                 target_channel = self.bot.get_channel(target_channel_id)
                 if target_channel and is_thread_channel(target_channel):
                     kwargs["thread"] = target_channel
                     print(f"Editing message in thread '{target_channel.name}' (ID: {target_channel_id})")
             
             edited_message = await webhook.edit_message(message_id, **kwargs)
-            channel_type = "thread" if target_channel_id and target_channel_id != webhook.channel_id else "channel"
-            print(f"Message ID {message_id} edited via webhook '{name}' in {channel_type}.")
+            channel_info = "channel"
+            if target_channel_id:
+                target_channel = self.bot.get_channel(target_channel_id)
+                if target_channel and is_thread_channel(target_channel):
+                    channel_info = f"thread '{target_channel.name}'"
+            print(f"Message ID {message_id} edited via webhook '{name}' in {channel_info}.")
             return edited_message
         except Exception as e:
             print(f"Error editing message via webhook '{name}': {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     async def delete_webhook_message(self, name, message_id, guild_id):
