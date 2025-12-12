@@ -57,6 +57,7 @@ class LLMAgent:
 
             formatted_messages = await self.format_messages(message, bot)
             custom_name = data.get('custom_name')
+            mode = data.get('mode', 'self')
             # Handle both Message and Interaction objects
             if isinstance(message, discord.Interaction):
                 name = self._clean_username(custom_name or message.user.display_name)
@@ -82,11 +83,11 @@ class LLMAgent:
             if self.model_config.get('supports_n_parameter', False):
                 # Use single request with n=3 for models that support it
                 print(f"Using n parameter for model {self.model_config.get('name')}")
-                completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, formatted_messages, n=3)
+                completions = await self.send_completion_request_with_n(prompt, max_tokens, temperature, formatted_messages, mode=mode, n=3)
             else:
                 # Fall back to separate requests for models that don't support n parameter
                 print(f"Using separate requests for model {self.model_config.get('name')}")
-                completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature, formatted_messages) for _ in range(3)]
+                completion_tasks = [self.send_completion_request(prompt, max_tokens, temperature, formatted_messages, mode=mode) for _ in range(3)]
                 completions = await asyncio.gather(*completion_tasks)
 
             print(f"Received {len(completions)} completions from API")
@@ -261,7 +262,7 @@ class LLMAgent:
             
         return "".join(formatted)
 
-    async def send_completion_request_with_n(self, prompt, max_tokens, temperature, formatted_messages, n=3):
+    async def send_completion_request_with_n(self, prompt, max_tokens, temperature, formatted_messages, mode='self', n=3):
         """
         Sends a single completion request with n parameter for multiple completions.
 
@@ -270,6 +271,7 @@ class LLMAgent:
             max_tokens (int): The maximum number of tokens for the response.
             temperature (float): The temperature for generation.
             formatted_messages (str): The formatted chat history for extracting stop sequences
+            mode (str): Generation mode - 'self' (stop at other users) or 'full' (generate full exchange)
             n (int): Number of completions to generate.
 
         Returns:
@@ -310,11 +312,15 @@ class LLMAgent:
                 "n": n
             }
             
-            # Add stop sequences for instruct models
-            stop_sequences = self._extract_usernames_from_messages(formatted_messages)
-            if stop_sequences:
-                payload["stop"] = stop_sequences
-                print(f"[DEBUG] Added stop sequences: {stop_sequences}")
+            # Add stop sequences for instruct models only in 'self' mode
+            # In 'full' mode, we want the model to generate a full multi-user exchange
+            if mode == 'self':
+                stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+                if stop_sequences:
+                    payload["stop"] = stop_sequences
+                    print(f"[DEBUG] Added stop sequences (mode=self): {stop_sequences}")
+            else:
+                print(f"[DEBUG] Skipping stop sequences (mode={mode}) to allow full exchange generation")
             
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
@@ -350,6 +356,7 @@ class LLMAgent:
             f.write(f"Temperature: {temperature}\n")
             f.write(f"Max Tokens: {max_tokens}\n")
             f.write(f"N: {n}\n")
+            f.write(f"Mode: {mode}\n")
             f.write(f"Endpoint: {endpoint}\n")
             if self.model_config.get('type') == 'instruct':
                 f.write("=== MESSAGES ===\n")
@@ -363,7 +370,7 @@ class LLMAgent:
                 f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request with n={n}, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request with n={n}, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}, mode: {mode}")
         
         # Debug the payload before sending
         print(f"[DEBUG] Request payload: {json.dumps(payload, indent=2)}")
@@ -446,7 +453,7 @@ class LLMAgent:
         print("Failed to send completion request after 10 retries.")
         return [""] * n
 
-    async def send_completion_request(self, prompt, max_tokens, temperature, formatted_messages):
+    async def send_completion_request(self, prompt, max_tokens, temperature, formatted_messages, mode='self'):
         """
         Sends the prompt to the completion or chat endpoint based on model type.
 
@@ -455,6 +462,7 @@ class LLMAgent:
             max_tokens (int): The maximum number of tokens for the response.
             temperature (float): The temperature for generation.
             formatted_messages (str): The formatted chat history for extracting stop sequences
+            mode (str): Generation mode - 'self' (stop at other users) or 'full' (generate full exchange)
 
         Returns:
             str: The response text from the LLM.
@@ -488,11 +496,15 @@ class LLMAgent:
                 "temperature": temperature
             }
             
-            # Add stop sequences for instruct models
-            stop_sequences = self._extract_usernames_from_messages(formatted_messages)
-            if stop_sequences:
-                payload["stop"] = stop_sequences
-                print(f"[DEBUG] Added stop sequences: {stop_sequences}")
+            # Add stop sequences for instruct models only in 'self' mode
+            # In 'full' mode, we want the model to generate a full multi-user exchange
+            if mode == 'self':
+                stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+                if stop_sequences:
+                    payload["stop"] = stop_sequences
+                    print(f"[DEBUG] Added stop sequences (mode=self): {stop_sequences}")
+            else:
+                print(f"[DEBUG] Skipping stop sequences (mode={mode}) to allow full exchange generation")
             
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
@@ -526,6 +538,7 @@ class LLMAgent:
             f.write(f"Model: {self.model_config.get('model_id')}\n")
             f.write(f"Temperature: {temperature}\n")
             f.write(f"Max Tokens: {max_tokens}\n")
+            f.write(f"Mode: {mode}\n")
             f.write(f"Endpoint: {endpoint}\n")
             if self.model_config.get('type') == 'instruct':
                 f.write("=== MESSAGES ===\n")
@@ -539,7 +552,7 @@ class LLMAgent:
                 f.write(prompt)
             f.write("\n")
 
-        print(f"Sending LLM request, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}")
+        print(f"Sending LLM request, model_type: {self.model_config.get('type')}, model: {self.model_config.get('model_id')}, length: {len(prompt)}, max_tokens: {max_tokens}, temperature: {temperature}, mode: {mode}")
 
         for _ in range(10):
             try:
