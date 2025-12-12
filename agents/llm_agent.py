@@ -432,6 +432,16 @@ class LLMAgent:
                 "n": n
             }
             
+            # Add stop sequences for base models in 'self' mode
+            # In 'full' mode, we want the model to generate a full multi-user exchange
+            if mode == 'self':
+                stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+                if stop_sequences:
+                    payload["stop"] = stop_sequences
+                    print(f"[DEBUG] Added stop sequences for base model (mode=self): {stop_sequences}")
+            else:
+                print(f"[DEBUG] Skipping stop sequences for base model (mode={mode})")
+            
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
                 payload["provider"] = {
@@ -455,10 +465,10 @@ class LLMAgent:
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
-                if "stop" in payload:
-                    f.write(f"=== STOP SEQUENCES ===\n")
-                    f.write(f"{payload['stop']}\n")
-            else:
+            if "stop" in payload:
+                f.write(f"=== STOP SEQUENCES ===\n")
+                f.write(f"{payload['stop']}\n")
+            if self.model_config.get('type') != 'instruct':
                 f.write("=== PROMPT ===\n")
                 f.write(prompt)
             f.write("\n")
@@ -616,6 +626,16 @@ class LLMAgent:
                 "temperature": temperature
             }
             
+            # Add stop sequences for base models in 'self' mode
+            # In 'full' mode, we want the model to generate a full multi-user exchange
+            if mode == 'self':
+                stop_sequences = self._extract_usernames_from_messages(formatted_messages)
+                if stop_sequences:
+                    payload["stop"] = stop_sequences
+                    print(f"[DEBUG] Added stop sequences for base model (mode=self): {stop_sequences}")
+            else:
+                print(f"[DEBUG] Skipping stop sequences for base model (mode={mode})")
+            
             # Add provider settings if quantization is specified
             if self.model_config.get('quantization'):
                 payload["provider"] = {
@@ -638,10 +658,10 @@ class LLMAgent:
                 f.write("=== MESSAGES ===\n")
                 for msg in payload["messages"]:
                     f.write(f"{msg['role']}: {msg['content']}\n")
-                if "stop" in payload:
-                    f.write(f"=== STOP SEQUENCES ===\n")
-                    f.write(f"{payload['stop']}\n")
-            else:
+            if "stop" in payload:
+                f.write(f"=== STOP SEQUENCES ===\n")
+                f.write(f"{payload['stop']}\n")
+            if self.model_config.get('type') != 'instruct':
                 f.write("=== PROMPT ===\n")
                 f.write(prompt)
             f.write("\n")
