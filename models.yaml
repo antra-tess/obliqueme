@@ -6,6 +6,7 @@ models:
     model_id: "meta-llama/Meta-Llama-3.1-405B"
     type: "base"
     endpoint: "https://api.hyperbolic.xyz/v1/completions"
+    api_key_env: "HYPERBOLIC_API_KEY"
     max_tokens: 200
     quantization: ""
     supports_n_parameter: false
@@ -72,7 +73,7 @@ models:
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
-    supports_n_parameter: true
+    supports_n_parameter: false
 
   claude_sonnet:
     name: "Claude 4 Sonnet"
@@ -83,6 +84,40 @@ models:
     quantization: ""
     system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
     user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: false
+
+  claude_sonnet_45:
+    name: "Claude Sonnet 4ю5"
+    model_id: "anthropic/claude-sonnet-4-5"
+    type: "instruct"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    max_tokens: 600
+    quantization: ""
+    system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
+    user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: false
+
+  claude_sonnet:
+    name: "Claude Opus 4.5"
+    model_id: "anthropic/claude-opus-4-5"
+    type: "instruct"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    max_tokens: 600
+    quantization: ""
+    system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
+    user_prefix: "<cmd>cat untitled.log</cmd>"
+    supports_n_parameter: false
+
+  mistral:
+    name: "Mistral 671B"
+    model_id: "/models/Mistral-Large-3-675B-Base-2512"
+    type: "base"
+    endpoint: "http://chat.tesserae.cc/v1/completions/"
+    max_tokens: 600
+    quantization: ""
+    api_key_env: "TESSERAE_API_KEY"  # Use this env var for API key instead of OPENROUTER_API_KEY
+    #system_prompt: "The assistant is in CLI simulation mode, and responds to the user's CLI commands only with outputs of the commands."
+    #user_prefix: "<cmd>cat untitled.log</cmd>"
     supports_n_parameter: true
 
 
@@ -94,3 +129,4 @@ bot:
   keyword: "obliqueme"
   random_string_length: 10
   message_history_limit: 80 
+

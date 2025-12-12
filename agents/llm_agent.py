@@ -27,6 +27,24 @@ class LLMAgent:
         self.log_dir = "logs"
         os.makedirs(self.log_dir, exist_ok=True)
 
+    def _get_api_key(self):
+        """
+        Get the API key for the current model.
+        Checks for model-specific api_key_env first, then falls back to OPENROUTER_API_KEY.
+        """
+        # Check if model has a custom API key environment variable
+        api_key_env = self.model_config.get('api_key_env')
+        if api_key_env:
+            api_key = os.getenv(api_key_env)
+            if api_key:
+                print(f"[DEBUG] Using API key from {api_key_env}")
+                return api_key
+            else:
+                print(f"[WARNING] {api_key_env} not set, falling back to OPENROUTER_API_KEY")
+        
+        # Fall back to default OpenRouter API key
+        return self.config.OPENROUTER_API_KEY
+
     async def process_queue(self):
         while True:
             print("\nWaiting for queue item...")
@@ -378,7 +396,7 @@ class LLMAgent:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {self._get_api_key()}",
             "X-Title": "Oblique"
         }
 
@@ -563,7 +581,7 @@ class LLMAgent:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {self._get_api_key()}",
             "X-Title": "Oblique"
         }
 
