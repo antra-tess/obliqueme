@@ -82,20 +82,12 @@ class LLMAgent:
             else:
                 name = self._clean_username(custom_name or message.author.display_name)
 
-            # Add seed text if provided
+            # Add seed text if provided - use colon format for all models
             prompt = formatted_messages
-            if self.model_config.get('type') == 'instruct':
-                # Use colon format for instruct models
-                if data.get('seed'):
-                    prompt += f'{name}: {data["seed"]}'
-                else:
-                    prompt += f'{name}:'
-            else:
-                # Use XML tag format for base models
-                if data.get('seed'):
-                    prompt += f'<{name}> {data["seed"]}\n'
-                elif not data.get('suppress_name', False):
-                    prompt += f'<{name}>\n'
+            if data.get('seed'):
+                prompt += f'{name}: {data["seed"]}'
+            elif not data.get('suppress_name', False):
+                prompt += f'{name}:'
 
             # Request completions - use n parameter if supported, otherwise make separate requests
             if self.model_config.get('supports_n_parameter', False):
@@ -281,9 +273,8 @@ class LLMAgent:
 
     async def format_messages(self, message, bot=None):
         """
-        Formats the last messages into appropriate format based on model type.
-        - Base models: XML tags format
-        - Instruct models: Colon format
+        Formats the last messages into colon format for all models.
+        Format: username: message content
         
         Supports .history branch markers for tree-structured conversations.
         When a .history message with "last: <discord_url>" is encountered,
@@ -355,13 +346,8 @@ class LLMAgent:
                 if clean_content.startswith(".") or clean_content == "Oblique: Generating..." or clean_content == "Regenerating...":
                     continue
                 
-                # Format based on model type
-                if self.model_config.get('type') == 'instruct':
-                    # Use colon format for instruct models
-                    formatted.append(f'{username}: {clean_content}\n')
-                else:
-                    # Use XML tag format for base models
-                    formatted.append(f'<{username}> {clean_content}\n')
+                # Use colon format for all models
+                formatted.append(f'{username}: {clean_content}\n')
                     
         except Exception as e:
             print(f"Error formatting messages: {e}")
@@ -762,25 +748,9 @@ class LLMAgent:
         # Handle different modes
         if data and data.get('mode') == 'self':
             print(f"[DEBUG] Processing in SELF mode")
-            # Get the username for filtering
-            raw_username = data.get('username', '')
-            print(f"[DEBUG] Raw username from data: '{raw_username}'")
-            username = raw_username.replace("[oblique]", "")
-            print(f"[DEBUG] Username after oblique removal: '{username}'")
-            print(f"[DEBUG] Target username for extraction: '{username}'")
-            
-            # For self mode, extract content that belongs to the target user
-            if self.model_config.get('type') == 'instruct':
-                print(f"[DEBUG] Using instruct model with stop sequences - no extraction needed")
-                # For instruct models, stop sequences handle the boundaries automatically
-                # Just return the cleaned response directly
-                final_result = processed_text.strip()
-            else:
-                print(f"[DEBUG] Using XML format extraction for base model")
-                # For XML format, find the user's section  
-                result = self._extract_user_content_xml_format(processed_text, username)
-                final_result = result if result.strip() else processed_text.strip()
-                
+            # For self mode, stop sequences handle the boundaries automatically
+            # Just return the cleaned response directly
+            final_result = processed_text.strip()
             print(f"[DEBUG] Self mode result: {len(final_result)} chars")
         else:
             print(f"[DEBUG] Processing in FULL mode (mode: {data.get('mode') if data else 'None'})")
