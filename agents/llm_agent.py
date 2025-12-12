@@ -135,12 +135,141 @@ class LLMAgent:
             import traceback
             traceback.print_exc()
 
+    def _parse_discord_message_url(self, url):
+        """
+        Parse a Discord message URL to extract guild_id, channel_id, message_id.
+        
+        Format: https://discord.com/channels/{guild_id}/{channel_id}/{message_id}
+        
+        Returns:
+            tuple: (guild_id, channel_id, message_id) or None if invalid
+        """
+        import re
+        pattern = r'https?://(?:www\.)?discord\.com/channels/(\d+)/(\d+)/(\d+)'
+        match = re.match(pattern, url.strip())
+        if match:
+            return int(match.group(1)), int(match.group(2)), int(match.group(3))
+        return None
+
+    def _is_history_branch_message(self, content):
+        """
+        Check if a message is a .history branch marker.
+        
+        Format:
+        .history
+        ---
+        last: https://discord.com/channels/...
+        
+        Returns:
+            str or None: The message URL if this is a history branch, None otherwise
+        """
+        if not content.strip().startswith('.history'):
+            return None
+        
+        # Look for "last:" followed by a Discord message URL
+        import re
+        pattern = r'last:\s*(https?://(?:www\.)?discord\.com/channels/\d+/\d+/\d+)'
+        match = re.search(pattern, content)
+        if match:
+            return match.group(1)
+        return None
+
+    async def _collect_messages_with_branches(self, bot, start_channel, before_message, limit, max_branch_depth=5):
+        """
+        Collect messages following .history branch markers.
+        
+        When a .history message with a "last:" URL is encountered, jump to that message
+        and continue collecting from there. This allows for tree-structured conversations.
+        
+        Args:
+            bot: The Discord bot instance
+            start_channel: The channel to start collecting from
+            before_message: The message to start before (or None)
+            limit: Maximum number of messages to collect
+            max_branch_depth: Maximum number of .history jumps to prevent infinite loops
+            
+        Returns:
+            list: List of (message, source) tuples in chronological order
+        """
+        all_messages = []
+        messages_collected = 0
+        current_channel = start_channel
+        current_before = before_message
+        branch_depth = 0
+        
+        while messages_collected < limit and branch_depth <= max_branch_depth:
+            print(f"[DEBUG] Collecting from channel {current_channel.id}, depth={branch_depth}, collected={messages_collected}")
+            
+            branch_found = False
+            batch_messages = []
+            
+            # Collect messages from current position
+            async for msg in current_channel.history(limit=limit - messages_collected, before=current_before):
+                content = msg.content.strip()
+                
+                # Check if this is a .history branch marker
+                branch_url = self._is_history_branch_message(content)
+                if branch_url:
+                    print(f"[DEBUG] Found .history branch at message {msg.id}: {branch_url}")
+                    
+                    # Parse the URL
+                    parsed = self._parse_discord_message_url(branch_url)
+                    if parsed:
+                        guild_id, channel_id, message_id = parsed
+                        
+                        # Get the target channel
+                        target_channel = bot.get_channel(channel_id)
+                        if target_channel:
+                            try:
+                                # Fetch the specific message to use as "before" reference
+                                target_message = await target_channel.fetch_message(message_id)
+                                
+                                # Add collected messages so far (before the branch)
+                                all_messages.extend(batch_messages)
+                                messages_collected += len(batch_messages)
+                                
+                                # Jump to the new location
+                                current_channel = target_channel
+                                current_before = target_message
+                                branch_depth += 1
+                                branch_found = True
+                                print(f"[DEBUG] Jumping to channel {channel_id}, message {message_id}")
+                                break
+                            except Exception as e:
+                                print(f"[DEBUG] Failed to fetch branch target: {e}")
+                        else:
+                            print(f"[DEBUG] Could not find channel {channel_id} for branch")
+                    else:
+                        print(f"[DEBUG] Failed to parse branch URL: {branch_url}")
+                
+                # Regular message - add to batch
+                source = 'thread' if hasattr(current_channel, 'parent_id') and current_channel.parent_id else 'channel'
+                batch_messages.append((msg, source))
+            
+            if not branch_found:
+                # No more branches, add remaining messages and exit
+                all_messages.extend(batch_messages)
+                messages_collected += len(batch_messages)
+                break
+        
+        if branch_depth > max_branch_depth:
+            print(f"[DEBUG] Warning: Hit max branch depth of {max_branch_depth}")
+        
+        # Sort all messages by timestamp (oldest first for context)
+        all_messages.sort(key=lambda x: x[0].created_at)
+        
+        print(f"[DEBUG] Total messages collected across {branch_depth} branches: {len(all_messages)}")
+        return all_messages
+
     async def format_messages(self, message, bot=None):
         """
         Formats the last messages into appropriate format based on model type.
         - Base models: XML tags format
         - Instruct models: Colon format
-        For threads, includes both parent channel and thread history.
+        
+        Supports .history branch markers for tree-structured conversations.
+        When a .history message with "last: <discord_url>" is encountered,
+        the collection jumps to that message and continues from there.
 
         Args:
             message (discord.Message): The triggering message.
@@ -154,69 +283,16 @@ class LLMAgent:
         all_messages = []
         
         try:
-            # Check if we're in a thread
-            if hasattr(channel, 'parent_id') and channel.parent_id:
-                print(f"[DEBUG] Collecting history from thread '{channel.name}' and parent channel")
-                
-                # Get parent channel
-                parent_channel = bot.get_channel(channel.parent_id) if bot else None
-                if not parent_channel and hasattr(message, 'guild') and message.guild:
-                    parent_channel = message.guild.get_channel(channel.parent_id)
-                
-                if parent_channel:
-                    # First, get all available thread messages
-                    print(f"[DEBUG] Getting thread history")
-                    thread_messages = []
-                    async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
-                                                   before=message if isinstance(message, discord.Message) else None):
-                        thread_messages.append((msg, 'thread'))
-                    
-                    print(f"[DEBUG] Got {len(thread_messages)} messages from thread")
-                    
-                    # Calculate remaining limit for parent channel
-                    remaining_limit = self.config.MESSAGE_HISTORY_LIMIT - len(thread_messages)
-                    
-                    if remaining_limit > 0:
-                        # For parent channel history, we want messages from before the thread was created
-                        # Use the oldest thread message as a reference point, or just get recent history
-                        print(f"[DEBUG] Getting up to {remaining_limit} parent channel messages")
-                        
-                        # Get parent channel history
-                        # If we have thread messages, use the oldest one as the "before" reference
-                        # This ensures we get context leading up to when the thread started
-                        parent_messages = []
-                        before_ref = None
-                        if thread_messages:
-                            # thread_messages are in reverse order (newest first from history())
-                            # so the last one is the oldest thread message
-                            oldest_thread_msg = thread_messages[-1][0]
-                            before_ref = oldest_thread_msg
-                            print(f"[DEBUG] Using oldest thread message as reference: {oldest_thread_msg.id}")
-                        
-                        async for msg in parent_channel.history(limit=remaining_limit, before=before_ref):
-                            parent_messages.append((msg, 'parent'))
-                        
-                        print(f"[DEBUG] Got {len(parent_messages)} messages from parent channel")
-                        
-                        # Combine all messages
-                        all_messages = parent_messages + thread_messages
-                    else:
-                        print(f"[DEBUG] Thread used full message limit, no parent channel history needed")
-                        all_messages = thread_messages
-                else:
-                    print(f"[DEBUG] Parent channel {channel.parent_id} not found, using thread only")
-                    async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
-                                                   before=message if isinstance(message, discord.Message) else None):
-                        all_messages.append((msg, 'thread'))
-            else:
-                print(f"[DEBUG] Regular channel, collecting normal history")
-                # Regular channel - collect normally
-                async for msg in channel.history(limit=self.config.MESSAGE_HISTORY_LIMIT,
-                                               before=message if isinstance(message, discord.Message) else None):
-                    all_messages.append((msg, 'channel'))
+            before_ref = message if isinstance(message, discord.Message) else None
             
-            # Sort all messages by timestamp (oldest first for context)
-            all_messages.sort(key=lambda x: x[0].created_at)
+            # Collect messages with branch support
+            all_messages = await self._collect_messages_with_branches(
+                bot=bot,
+                start_channel=channel,
+                before_message=before_ref,
+                limit=self.config.MESSAGE_HISTORY_LIMIT,
+                max_branch_depth=10  # Allow up to 10 .history jumps
+            )
             
             print(f"[DEBUG] Total messages collected: {len(all_messages)}")
             
