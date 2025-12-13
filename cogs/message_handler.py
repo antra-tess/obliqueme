@@ -666,7 +666,8 @@ class MessageHandler(commands.Cog):
                             await self.webhook_manager.delete_webhook_message(
                                 name=webhook_name,  # Use original webhook
                                 message_id=original_message.id,
-                                guild_id=interaction.guild_id
+                                guild_id=interaction.guild_id,
+                                target_channel_id=interaction.channel_id
                             )
                             print(f"Deleted message for {interaction.user.display_name}")
                             

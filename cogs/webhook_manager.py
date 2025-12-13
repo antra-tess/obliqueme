@@ -394,7 +394,7 @@ class WebhookManager(commands.Cog):
             traceback.print_exc()
             return None
 
-    async def delete_webhook_message(self, name, message_id, guild_id):
+    async def delete_webhook_message(self, name, message_id, guild_id, target_channel_id=None):
         """
         Deletes a specific message sent via the specified webhook.
 
@@ -402,6 +402,7 @@ class WebhookManager(commands.Cog):
             name (str): The name of the webhook.
             message_id (int): The ID of the message to delete.
             guild_id (int): The ID of the guild.
+            target_channel_id (int, optional): The target channel/thread ID.
 
         Returns:
             bool: True if the message was successfully deleted, False otherwise.
@@ -411,7 +412,22 @@ class WebhookManager(commands.Cog):
             print(f"Webhook '{name}' not found.")
             return False
         try:
-            await webhook.delete_message(message_id)
+            kwargs = {}
+            
+            # Check if target is a thread
+            if target_channel_id:
+                target_channel = self.bot.get_channel(target_channel_id)
+                if not target_channel:
+                    try:
+                        target_channel = await self.bot.fetch_channel(target_channel_id)
+                    except Exception as e:
+                        print(f"[DEBUG] Could not fetch channel {target_channel_id}: {e}")
+                        target_channel = None
+                if target_channel and is_thread_channel(target_channel):
+                    kwargs["thread"] = target_channel
+                    print(f"Deleting message in thread '{target_channel.name}' (ID: {target_channel_id})")
+            
+            await webhook.delete_message(message_id, **kwargs)
             print(f"Message ID {message_id} deleted via webhook '{name}'.")
             return True
         except Exception as e:
